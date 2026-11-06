@@ -11,7 +11,7 @@ Run from the project root:
 clojure -M:run Ada                      # Run the app
 clojure -M:test                         # Run tests; no Ollama required
 clojure -M:build                        # AOT-compile to target/classes (not a JAR)
-clojure                                 # Start a REPL
+clojure -M:nrepl                        # Start a nREPL
 clojure -Moutdated --upgrade --force    # Bump deps
 ```
 
