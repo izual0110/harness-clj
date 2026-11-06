@@ -42,7 +42,7 @@ clojure -M:run Ada Lovelace
  :defaults {:model "llama3.2"
             :stream false
             :keep_alive "5m"
-            :options {:temperature 0.8}}}
+            :options {:temperature 0.2}}}
 ```
 
 Это значения по умолчанию **клиента**. Замените хост и модель на свои.

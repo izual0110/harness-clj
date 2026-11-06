@@ -29,8 +29,12 @@
                               (.write out bytes)))))))
     (.start server)
     (try
-      (let [config (assoc (chat-model/load-config)
-                          :host (str "http://127.0.0.1:" (.getPort (.getAddress server)) "/"))
+      (let [config {:host (str "http://127.0.0.1:" (.getPort (.getAddress server)) "/")
+                    :timeout-ms 5000
+                    :defaults {:model "test-model"
+                               :stream false
+                               :keep_alive "5m"
+                               :options {:temperature 0.8}}}
             client (chat-model/client config)]
         (with-open [http-client ^HttpClient (:http-client client)]
           (f client requests)))
@@ -45,6 +49,13 @@
     (is (false? (get-in config [:defaults :stream]))))
   (is (thrown-with-msg? clojure.lang.ExceptionInfo #"resource not found"
                        (chat-model/load-config "missing-chat-model.edn"))))
+
+(deftest explicit-config-test
+  (with-redefs [chat-model/load-config (fn [& _]
+                                        (throw (ex-info "Unexpected resource config access" {})))]
+    (with-server 200 "{}"
+      (fn [client _]
+        (is (= {} (chat-model/generate client "Hello")))))))
 
 (deftest generate-test
   (with-server 200 "{\"response\":\"Привет!\",\"done\":true}"
