@@ -1,0 +1,8 @@
+{:paths ["src" "resources"]
+ :deps {org.clojure/clojure {:mvn/version "1.12.6"}}
+ :aliases
+ {:run {:main-opts ["-m" "harness-clj.core"]}
+  :test {:extra-paths ["test"]
+         :main-opts ["-m" "harness-clj.test-runner"]}
+  :build {:extra-paths ["dev"]
+          :main-opts ["-m" "build"]}}}
