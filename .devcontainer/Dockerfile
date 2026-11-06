@@ -1,6 +1,7 @@
 FROM alpine:3.24
 
-RUN apk add --no-cache bash ca-certificates curl git tar gzip findutils procps-ng coreutils python3 fontconfig ttf-dejavu libgcc libstdc++ tzdata zlib binutils docker-cli docker-cli-compose rlwrap
+# Zed downloads a glibc-linked clojure-lsp binary; Alpine needs gcompat to run it.
+RUN apk add --no-cache bash ca-certificates curl git tar gzip findutils procps-ng coreutils python3 fontconfig ttf-dejavu libgcc libstdc++ tzdata zlib binutils docker-cli docker-cli-compose rlwrap gcompat nodejs npm
 
 COPY --from=eclipse-temurin:27-jdk-alpine /opt/java/openjdk /opt/java/openjdk
 ENV JAVA_HOME=/opt/java/openjdk
