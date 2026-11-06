@@ -1,0 +1,6 @@
+{:host "http://localhost:11434"
+ :timeout-ms 120000
+ :defaults {:model "llama3.2"
+            :stream false
+            :keep_alive "5m"
+            :options {:temperature 0.2}}}

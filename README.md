@@ -27,6 +27,58 @@ clojure -M:run Ada Lovelace
 # Hello, Ada Lovelace!
 ```
 
+## Клиент chat-model (Ollama)
+
+Минимальный синхронный клиент по [документации Ollama API](https://github.com/ollama/ollama/blob/main/docs/api.md):
+`generate` (`POST /api/generate`), `chat` (`POST /api/chat`) и
+`list-models` (`GET /api/tags`). Streaming не поддерживается: отправляется
+`:stream false`, а попытка включить streaming вызывает исключение.
+
+Настройки находятся в `resources/chat-model.edn`:
+
+```clojure
+{:host "http://localhost:11434"
+ :timeout-ms 120000
+ :defaults {:model "llama3.2"
+            :stream false
+            :keep_alive "5m"
+            :options {:temperature 0.8}}}
+```
+
+Это значения по умолчанию **клиента**. Замените хост и модель на свои.
+Сервер Ollama должен быть запущен, а модель — заранее загружена, например
+командой `ollama pull llama3.2`. Клиент не скачивает модели автоматически.
+В devcontainer `localhost` указывает на контейнер; для Ollama на машине-хосте
+может потребоваться `http://host.docker.internal:11434` и настройка доступности сервера.
+
+Пример в REPL:
+
+```clojure
+(require '[harness-clj.chat-model :as chat-model])
+
+(let [client (chat-model/client)]
+  (with-open [http-client (:http-client client)]
+    (println (chat-model/list-models client))
+    (println (:response (chat-model/generate client "Почему небо голубое?")))
+    (println (get-in (chat-model/chat client
+                                [{:role "user" :content "Привет!"}]
+                                {:options {:temperature 0}})
+                     [:message :content]))))
+```
+
+Клиент переиспользует HTTP-соединения; создавайте его на время работы приложения,
+а не для каждого запроса. Для настроек из кода используйте
+`(chat-model/client (assoc (chat-model/load-config) :host "http://server:11434"))`.
+Третий аргумент `generate` и `chat` переопределяет параметры запроса, например
+`:model`, `:keep_alive`, `:format`, `:tools` (для chat). Вложенная карта `:options`
+объединяется с настройками из EDN.
+
+Функции возвращают полные ответы API как Clojure-карты с keyword-ключами,
+включая статистику и tool calls, если они есть. HTTP-ошибки вызывают `ExceptionInfo`
+с `:status`, `:url` и `:body` в `ex-data`; сетевые ошибки и таймауты
+передаются как исключения JDK. Таймаут применяется к соединению и каждому запросу.
+HTTP использует JDK, единственная дополнительная библиотека — `clojure.data.json`.
+
 ## Тесты
 
 ```sh
@@ -104,11 +156,14 @@ clojure
 
 ```text
 src/harness_clj/core.clj          — приложение и точка входа
-resources/                       — ресурсы приложения
+src/harness_clj/chat_model.clj        — минимальный клиент Ollama
+resources/chat-model.edn              — хост и параметры Ollama
 test/                            — тесты (см. ниже)
 dev/build.clj                     — AOT-компиляция
 deps.edn                         — зависимости и команды
 ```
 
-Тесты находятся в `test/harness_clj/core_test.clj`, их исполнитель —
-`test/harness_clj/test_runner.clj`.
+Тесты находятся в `test/harness_clj/core_test.clj` и
+`test/harness_clj/chat_model_test.clj`, их исполнитель —
+`test/harness_clj/test_runner.clj`. Тесты клиента используют локальный HTTP-сервер
+и не требуют запущенного Ollama или загруженной модели.
