@@ -8,10 +8,11 @@ Requires JDK 27 and [Clojure CLI](https://clojure.org/guides/install_clojure), o
 Run from the project root:
 
 ```sh
-clojure -M:run Ada   # Run the app
-clojure -M:test      # Run tests; no Ollama required
-clojure -M:build     # AOT-compile to target/classes (not a JAR)
-clojure             # Start a REPL
+clojure -M:run Ada                      # Run the app
+clojure -M:test                         # Run tests; no Ollama required
+clojure -M:build                        # AOT-compile to target/classes (not a JAR)
+clojure                                 # Start a REPL
+clojure -Moutdated --upgrade --force    # Bump deps
 ```
 
 CI runs tests, compilation, and the app in Docker.
