@@ -1,9 +1,10 @@
-FROM alpine:3.24
+FROM ubuntu:26.04
 
-# Zed downloads a glibc-linked clojure-lsp binary; Alpine needs gcompat to run it.
-RUN apk add --no-cache bash ca-certificates curl git tar gzip findutils procps-ng coreutils python3 fontconfig ttf-dejavu libgcc libstdc++ tzdata zlib binutils docker-cli docker-cli-compose rlwrap gcompat nodejs npm
+RUN apt-get update \
+    && DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends bash ca-certificates curl git tar gzip findutils procps python3 fontconfig libstdc++6 tzdata zlib1g binutils build-essential docker.io docker-compose-v2 rlwrap \
+    && rm -rf /var/lib/apt/lists/*
 
-COPY --from=eclipse-temurin:27-jdk-alpine /opt/java/openjdk /opt/java/openjdk
+COPY --from=eclipse-temurin:27-jdk /opt/java/openjdk /opt/java/openjdk
 ENV JAVA_HOME=/opt/java/openjdk
 ENV PATH="${JAVA_HOME}/bin:${PATH}"
 RUN java --version && javac --version
