@@ -6,6 +6,8 @@
     </encoder>
   </appender>
 
+  <logger name="harness-clj" level="DEBUG"/>
+
   <root level="${LOG_LEVEL:-INFO}">
     <appender-ref ref="CONSOLE"/>
   </root>
