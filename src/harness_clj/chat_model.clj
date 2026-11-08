@@ -2,7 +2,8 @@
   (:require [clojure.data.json :as json]
             [clojure.edn :as edn]
             [clojure.java.io :as io]
-            [clojure.string :as str])
+            [clojure.string :as str]
+            [clojure.tools.logging :as log])
   (:import [java.net URI]
            [java.net.http HttpClient HttpRequest HttpRequest$BodyPublishers
             HttpResponse$BodyHandlers]
@@ -27,49 +28,52 @@
               (.connectTimeout (Duration/ofMillis (:timeout-ms config)))
               (.build)))))
 
-(defn- request! [{:keys [host timeout-ms http-client]} method path body]
-  (let [url (str (str/replace host #"/+$" "") path)
-        builder (-> (HttpRequest/newBuilder (URI/create url))
-                    (.timeout (Duration/ofMillis timeout-ms))
-                    (.header "Accept" "application/json"))
-        request (if (= method :get)
-                  (.GET builder)
-                  (-> builder
-                      (.header "Content-Type" "application/json")
-                      (.POST (HttpRequest$BodyPublishers/ofString
-                              (json/write-str body)))))
-        response (.send ^HttpClient http-client (.build request)
-                        (HttpResponse$BodyHandlers/ofString StandardCharsets/UTF_8))
-        status (.statusCode response)
-        raw-body (.body response)]
-    (when-not (<= 200 status 299)
-      (throw (ex-info (str "Ollama request failed: HTTP " status)
-                      {:status status :url url :body raw-body})))
-    (let [result (json/read-str raw-body :key-fn keyword)]
-      (when-let [error (:error result)]
-        (throw (ex-info (str "Ollama error: " error)
-                        {:status status :url url :body result})))
-      result)))
-
-(defn- completion! [client path input params]
-  (let [defaults (:defaults client)
-        body (-> (merge defaults params input)
-                 (assoc :options (merge (:options defaults) (:options params))))]
+(defn- request! [{:keys [host timeout-ms http-client defaults]} method path params]
+  (let [body (when (= method :post)
+               (-> (merge defaults params)
+                   (assoc :options (merge (:options defaults) (:options params)))))]
     (when (:stream body)
       (throw (ex-info "Streaming is not supported; use :stream false" {})))
-    (request! client :post path (assoc body :stream false))))
+    (let [url (str (str/replace host #"/+$" "") path)
+          request-body (when body (json/write-str (assoc body :stream false)))
+          builder (-> (HttpRequest/newBuilder (URI/create url))
+                      (.timeout (Duration/ofMillis timeout-ms))
+                      (.header "Accept" "application/json"))
+          request (.build (if (= method :get)
+                            (.GET builder)
+                            (-> builder
+                                (.header "Content-Type" "application/json")
+                                (.POST (HttpRequest$BodyPublishers/ofString request-body)))))
+          _ (log/debugf "Ollama request:\n%s %s\n%s\n\n%s"
+                        (.method request) (.uri request)
+                        (str/join "\n" (for [[header values] (.map (.headers request))
+                                             value values]
+                                         (str header ": " value)))
+                        (or request-body ""))
+          response (.send ^HttpClient http-client request
+                          (HttpResponse$BodyHandlers/ofString StandardCharsets/UTF_8))
+          status (.statusCode response)
+          raw-body (.body response)]
+      (when-not (<= 200 status 299)
+        (throw (ex-info (str "Ollama request failed: HTTP " status)
+                        {:status status :url url :body raw-body})))
+      (let [result (json/read-str raw-body :key-fn keyword)]
+        (when-let [error (:error result)]
+          (throw (ex-info (str "Ollama error: " error)
+                          {:status status :url url :body result})))
+        result))))
 
 (defn generate
   "POST /api/generate. Returns the full response map with keyword keys."
   ([client prompt] (generate client prompt {}))
   ([client prompt params]
-   (completion! client "/api/generate" {:prompt prompt} params)))
+   (request! client :post "/api/generate" (assoc params :prompt prompt))))
 
 (defn chat
   "POST /api/chat. Messages use string roles, e.g. {:role \"user\" :content \"Hi\"}."
   ([client messages] (chat client messages {}))
   ([client messages params]
-   (completion! client "/api/chat" {:messages messages} params)))
+   (request! client :post "/api/chat" (assoc params :messages messages))))
 
 (defn list-models
   "GET /api/tags. Returns the full response map, including :models."
