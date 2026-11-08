@@ -1,0 +1,12 @@
+<configuration>
+  <appender name="CONSOLE" class="ch.qos.logback.core.ConsoleAppender">
+    <target>System.err</target>
+    <encoder>
+      <pattern>${LOG_PATTERN:-%gray(%d{HH:mm:ss.SSS}) %highlight(%-5level) %cyan(%logger{36}) - %msg%n}</pattern>
+    </encoder>
+  </appender>
+
+  <root level="${LOG_LEVEL:-INFO}">
+    <appender-ref ref="CONSOLE"/>
+  </root>
+</configuration>
