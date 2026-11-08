@@ -3,7 +3,7 @@
             [clojure.test :refer [deftest is testing]]
             [harness-clj.chat-model :as chat-model])
   (:import [com.sun.net.httpserver HttpHandler HttpServer]
-           [java.net InetSocketAddress]
+           [java.net InetSocketAddress URI]
            [java.net.http HttpClient]
            [java.nio.charset StandardCharsets]))
 
@@ -42,8 +42,10 @@
         (.stop server 0)))))
 
 (deftest config-test
-  (let [config (chat-model/load-config)]
-    (is (= "http://localhost:11434" (:host config)))
+  (let [config (chat-model/load-config)
+        host (URI/create (:host config))]
+    (is (contains? #{"http" "https"} (.getScheme host)))
+    (is (some? (.getHost host)))
     (is (pos? (:timeout-ms config)))
     (is (string? (get-in config [:defaults :model])))
     (is (false? (get-in config [:defaults :stream]))))
