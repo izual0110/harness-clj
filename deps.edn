@@ -3,8 +3,10 @@
          org.clojure/data.json {:mvn/version "2.5.2"}}
  :aliases
  {:run {:main-opts ["-m" "harness-clj.core"]}
-  :nrepl {:extra-deps {nrepl/nrepl {:mvn/version "1.8.0"}}
-          :main-opts ["-m" "nrepl.cmdline"]}
+  :nrepl {:extra-deps {nrepl/nrepl {:mvn/version "1.8.0"}
+                       cider/cider-nrepl {:mvn/version "0.64.1"}}
+          :main-opts ["-m" "nrepl.cmdline"
+                      "--middleware" "[cider.nrepl/cider-middleware]"]}
   :test {:extra-paths ["test"]
          :main-opts ["-m" "harness-clj.test-runner"]}
   :build {:extra-paths ["dev"]
