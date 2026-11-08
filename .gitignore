@@ -3,6 +3,7 @@
 .lsp/.cache/
 .nrepl-port
 target/
+logs/
 .DS_Store
 .idea/
 .calva/
