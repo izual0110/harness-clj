@@ -18,10 +18,14 @@ clojure -M:outdated    # Check dependency updates
 
 Configure host and model in `resources/chat-model.edn`.
 Start Ollama and pull the configured model before using the client.
+Set `:think` alongside `:stream` in `:defaults`, not inside `:options`.
+Both `chat` and `generate` also accept `{:think false}` as per-request parameters.
 Call `(chat-model/close client)` in a `finally` block when the client is no longer
 needed. It closes the underlying HTTP client and waits for ongoing requests to finish.
 
-Set `LOG_LEVEL=DEBUG` when starting the application or REPL to log outgoing Ollama
-requests: method, URL, explicitly configured headers, and the exact JSON body sent
-to the HTTP client. Headers added automatically by the JDK are not included.
-These logs contain prompts and message contents; enable them only when appropriate.
+The `harness-clj` logger uses `DEBUG` in `resources/logback.xml`. Other loggers
+inherit the root level, which defaults to `INFO` and can be overridden with `LOG_LEVEL`.
+Debug output includes outgoing Ollama requests: method, URL, explicitly configured
+headers, and the exact JSON body sent to the HTTP client. Headers added automatically
+by the JDK are not included. These logs contain prompts and message contents;
+set the `harness-clj` logger level to `INFO` to disable them.

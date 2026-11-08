@@ -8,17 +8,43 @@
    :system-prompts system-prompts
    :tools (into {} (map (juxt :name identity) tools))
    :state (atom
-            {:histories {}
+            {:history []
              :tool-calls 0})})
 
 (defonce ai-agent
   (create-agent
     {:client (chat-model/client)
-     :system-prompts [system-prompt]
+     :system-prompts [{:role "system" :content system-prompt}]
      :tools []}))
 
-;;(def client (chat-model/client))
+(defn add-message [agent message] (swap! (:state agent) update :history conj {:role "user" :content message}))
+(defn add-assistant-message [agent message] (swap! (:state agent) update :history conj {:role "assistant" :content message}))
 
-(println (chat-model/generate (:client ai-agent) "что ответил бы оптимистичный инженер на вопрос: \" Что делать, если в проекте не хватает зависимостей?\""))
+
+(let [agent ai-agent
+      state (:state agent)
+      messages (into (:system-prompts agent) (:history @state))]
+  messages)
+
+(defn send-message [user-message]
+  (let [agent ai-agent
+        _ (add-message agent user-message)
+        state (:state agent)
+        messages (into (:system-prompts agent) (:history @state))
+        response (chat-model/chat (:client agent) messages)]
+    (add-assistant-message agent (get-in response [:message :content]))
+    response))
 
 
+;; (send-message "что ответил бы оптимистичный инженер на вопрос: \" Что делать, если в проекте не хватает зависимостей?\" Ответь максимально коротко.")
+
+(comment
+
+
+  (+ 1 2)
+
+  (println (chat-model/chat (:client ai-agent)
+                            [{:role "user"
+                              :content "что ответил бы оптимистичный инженер на вопрос: \" Что делать, если в проекте не хватает зависимостей?\""}]))
+
+  (println (chat-model/generate (:client ai-agent) "что ответил бы оптимистичный инженер на вопрос: \" Что делать, если в проекте не хватает зависимостей?\"")))
