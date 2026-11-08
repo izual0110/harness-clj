@@ -55,7 +55,9 @@
     (is (some? (.getHost host)))
     (is (pos? (:timeout-ms config)))
     (is (string? (get-in config [:defaults :model])))
-    (is (false? (get-in config [:defaults :stream]))))
+    (is (false? (get-in config [:defaults :stream])))
+    (is (false? (get-in config [:defaults :think])))
+    (is (not (contains? (get-in config [:defaults :options]) :think))))
   (is (thrown-with-msg? clojure.lang.ExceptionInfo #"resource not found"
                        (chat-model/load-config "missing-chat-model.edn"))))
 
@@ -117,6 +119,20 @@
         (is (= tools (:tools body)))
         (is (= 0 (get-in body [:options :temperature])))
         (is (false? (:stream body)))))))
+
+(deftest thinking-parameters-test
+  (doseq [[complete input] [[chat-model/generate "Hello"]
+                           [chat-model/chat [{:role "user" :content "Hello"}]]]]
+    (with-server 200 "{}"
+      (fn [client requests]
+        (let [client (assoc-in client [:defaults :think] false)]
+          (complete client input)
+          (complete client input {:think true})
+          (complete (assoc-in client [:defaults :think] true) input {:think false})
+          (is (= [false true false]
+                 (mapv #(get-in % [:body :think]) @requests)))
+          (is (every? #(not (contains? (get-in % [:body :options]) :think))
+                      @requests)))))))
 
 (deftest list-models-test
   (with-server 200 "{\"models\":[{\"name\":\"llama3.2:latest\"}]}"

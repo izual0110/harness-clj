@@ -1,6 +1,7 @@
 {:host "http://localhost:11431"
- :timeout-ms 120000
+ :timeout-ms 480000
  :defaults {:model "qwen3.5:4b"
             :stream false
+            :think false
             :keep_alive "5m"
-            :options {:temperature 0.2 :think false}}}
+            :options {:temperature 0.2}}}
