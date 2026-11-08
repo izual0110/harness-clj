@@ -45,6 +45,7 @@
     (add-assistant-message agent (get-in response [:message :content]))
     response))
 
-(send-message "повтори")
+(comment
+  (send-message "повтори"))
 
 ;;(send-message "что ответил бы оптимистичный инженер на вопрос: \" Что делать, если в проекте не хватает зависимостей?\" Ответь максимально коротко.")
