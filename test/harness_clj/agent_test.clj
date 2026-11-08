@@ -5,7 +5,7 @@
 
 (deftest initial-history-test
   (let [ai-agent (agent/create-agent {:client ::client
-                                     :system-prompts ["Be brief"]
+                                     :system-prompts [{:role "system" :content "Be brief"}]
                                      :tools []})]
     (is (= {:history [] :tool-calls 0} @(:state ai-agent)))))
 
@@ -23,7 +23,8 @@
 
 (deftest send-message-test
   (let [ai-agent (agent/create-agent {:client ::client
-                                     :system-prompts ["Be brief" "Be helpful"]
+                                     :system-prompts [{:role "system" :content "Be brief"}
+                                                      {:role "system" :content "Be helpful"}]
                                      :tools []})
         requests (atom [])
         responses [{:model "test-model"
