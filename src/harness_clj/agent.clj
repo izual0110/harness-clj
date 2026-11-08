@@ -1,5 +1,7 @@
 (ns harness-clj.agent
-  (:require [harness-clj.chat-model :as chat-model]))
+  (:require [clojure.string :as str]
+            [harness-clj.chat-model :as chat-model]
+            [clojure.tools.logging :as log]))
 
 (def system-prompt "You are Harness, a coding agent that works in a local repository. Answer concisely.")
 
@@ -31,10 +33,18 @@
         _ (add-message agent user-message)
         state (:state agent)
         messages (into (:system-prompts agent) (:history @state))
+        _ (log/debugf "Messages:\n%s"
+                      (let [line-format (str "%-" (inc (count (str (count messages))))
+                                             "s [%s] %s")]
+                        (str/join "\n"
+                                  (map-indexed (fn [index {:keys [role content]}]
+                                                 (format line-format (str (inc index) ")")
+                                                         role content))
+                                               messages))))
         response (chat-model/chat (:client agent) messages)]
     (add-assistant-message agent (get-in response [:message :content]))
     response))
 
-;;(send-message "повтори")
+(send-message "повтори")
 
 ;;(send-message "что ответил бы оптимистичный инженер на вопрос: \" Что делать, если в проекте не хватает зависимостей?\" Ответь максимально коротко.")
