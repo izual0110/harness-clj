@@ -18,6 +18,8 @@ clojure -M:outdated    # Check dependency updates
 
 Configure host and model in `resources/chat-model.edn`.
 Start Ollama and pull the configured model before using the client.
+Call `(chat-model/close client)` in a `finally` block when the client is no longer
+needed. It closes the underlying HTTP client and waits for ongoing requests to finish.
 
 Set `LOG_LEVEL=DEBUG` when starting the application or REPL to log outgoing Ollama
 requests: method, URL, explicitly configured headers, and the exact JSON body sent

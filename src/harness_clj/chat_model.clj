@@ -20,7 +20,7 @@
                      {:resource resource-name})))))
 
 (defn client
-  "Creates a reusable client. Close :http-client when no longer needed."
+  "Creates a reusable client. Call close when no longer needed."
   ([] (client (load-config)))
   ([config]
    (assoc config :http-client
@@ -28,52 +28,61 @@
               (.connectTimeout (Duration/ofMillis (:timeout-ms config)))
               (.build)))))
 
-(defn- request! [{:keys [host timeout-ms http-client defaults]} method path params]
-  (let [body (when (= method :post)
-               (-> (merge defaults params)
-                   (assoc :options (merge (:options defaults) (:options params)))))]
-    (when (:stream body)
+(defn close
+  "Closes the underlying HTTP client, waiting for ongoing requests to finish."
+  [{:keys [http-client]}]
+  (.close ^HttpClient http-client))
+
+(defn- request! [{:keys [host timeout-ms http-client]} method path body]
+  (let [url (str (str/replace host #"/+$" "") path)
+        request-body (when body (json/write-str body))
+        builder (-> (HttpRequest/newBuilder (URI/create url))
+                    (.timeout (Duration/ofMillis timeout-ms))
+                    (.header "Accept" "application/json"))
+        request (.build (if (= method :get)
+                          (.GET builder)
+                          (-> builder
+                              (.header "Content-Type" "application/json")
+                              (.POST (HttpRequest$BodyPublishers/ofString request-body)))))
+        _ (log/debugf "Ollama request:\n%s %s\n%s\n\n%s"
+                      (.method request) (.uri request)
+                      (str/join "\n" (for [[header values] (.map (.headers request))
+                                           value values]
+                                       (str header ": " value)))
+                      (or request-body ""))
+        response (.send ^HttpClient http-client request
+                        (HttpResponse$BodyHandlers/ofString StandardCharsets/UTF_8))
+        status (.statusCode response)
+        raw-body (.body response)]
+    (when-not (<= 200 status 299)
+      (throw (ex-info (str "Ollama request failed: HTTP " status)
+                      {:status status :url url :body raw-body})))
+    (let [result (json/read-str raw-body :key-fn keyword)]
+      (when-let [error (:error result)]
+        (throw (ex-info (str "Ollama error: " error)
+                        {:status status :url url :body result})))
+      result)))
+
+(defn- generation-params [{:keys [defaults]} params]
+  (let [params (-> (merge defaults params)
+                   (assoc :options (merge (:options defaults) (:options params))))]
+    (when (:stream params)
       (throw (ex-info "Streaming is not supported; use :stream false" {})))
-    (let [url (str (str/replace host #"/+$" "") path)
-          request-body (when body (json/write-str (assoc body :stream false)))
-          builder (-> (HttpRequest/newBuilder (URI/create url))
-                      (.timeout (Duration/ofMillis timeout-ms))
-                      (.header "Accept" "application/json"))
-          request (.build (if (= method :get)
-                            (.GET builder)
-                            (-> builder
-                                (.header "Content-Type" "application/json")
-                                (.POST (HttpRequest$BodyPublishers/ofString request-body)))))
-          _ (log/debugf "Ollama request:\n%s %s\n%s\n\n%s"
-                        (.method request) (.uri request)
-                        (str/join "\n" (for [[header values] (.map (.headers request))
-                                             value values]
-                                         (str header ": " value)))
-                        (or request-body ""))
-          response (.send ^HttpClient http-client request
-                          (HttpResponse$BodyHandlers/ofString StandardCharsets/UTF_8))
-          status (.statusCode response)
-          raw-body (.body response)]
-      (when-not (<= 200 status 299)
-        (throw (ex-info (str "Ollama request failed: HTTP " status)
-                        {:status status :url url :body raw-body})))
-      (let [result (json/read-str raw-body :key-fn keyword)]
-        (when-let [error (:error result)]
-          (throw (ex-info (str "Ollama error: " error)
-                          {:status status :url url :body result})))
-        result))))
+    (assoc params :stream false)))
 
 (defn generate
   "POST /api/generate. Returns the full response map with keyword keys."
   ([client prompt] (generate client prompt {}))
   ([client prompt params]
-   (request! client :post "/api/generate" (assoc params :prompt prompt))))
+   (request! client :post "/api/generate"
+             (assoc (generation-params client params) :prompt prompt))))
 
 (defn chat
   "POST /api/chat. Messages use string roles, e.g. {:role \"user\" :content \"Hi\"}."
   ([client messages] (chat client messages {}))
   ([client messages params]
-   (request! client :post "/api/chat" (assoc params :messages messages))))
+   (request! client :post "/api/chat"
+             (assoc (generation-params client params) :messages messages))))
 
 (defn list-models
   "GET /api/tags. Returns the full response map, including :models."

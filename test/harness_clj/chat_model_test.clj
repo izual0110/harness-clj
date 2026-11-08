@@ -41,8 +41,10 @@
                                :keep_alive "5m"
                                :options {:temperature 0.8}}}
             client (chat-model/client config)]
-        (with-open [http-client ^HttpClient (:http-client client)]
-          (f client requests)))
+        (try
+          (f client requests)
+          (finally
+            (chat-model/close client))))
       (finally
         (.stop server 0)))))
 
@@ -63,6 +65,16 @@
     (with-server 200 "{}"
       (fn [client _]
         (is (= {} (chat-model/generate client "Hello")))))))
+
+(deftest close-test
+  (with-server 200 "{}"
+    (fn [client requests]
+      (chat-model/list-models client)
+      (is (nil? (chat-model/close client)))
+      (is (.isTerminated ^HttpClient (:http-client client)))
+      (is (nil? (chat-model/close client)))
+      (is (thrown? java.io.IOException (chat-model/list-models client)))
+      (is (= 1 (count @requests))))))
 
 (deftest generate-test
   (with-server 200 "{\"response\":\"Привет!\",\"done\":true}"
@@ -171,6 +183,16 @@
         (.setLevel logger original-level)
         (.setAdditive logger original-additive)
         (.stop appender)))))
+
+(deftest non-streaming-parameters-test
+  (doseq [[complete input] [[chat-model/generate "Hello"]
+                            [chat-model/chat []]]]
+    (with-server 200 "{}"
+      (fn [client requests]
+        (complete (update client :defaults dissoc :stream) input)
+        (is (false? (get-in (first @requests) [:body :stream])))
+        (complete (assoc-in client [:defaults :stream] true) input {:stream false})
+        (is (false? (get-in (second @requests) [:body :stream])))))))
 
 (deftest streaming-rejected-test
   (with-server 200 "{}"
