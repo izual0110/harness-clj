@@ -86,7 +86,8 @@
       (is (= [{:method "POST"
                :path "/api/generate"
                :content-type "application/json"
-               :raw-body (json/write-str (assoc (:defaults client) :prompt "Привет"))
+               :raw-body (json/write-str (assoc (:defaults client) :prompt "Привет")
+                                                        :escape-unicode false)
                :body (assoc (:defaults client) :prompt "Привет")}]
              @requests)))))
 
@@ -186,6 +187,7 @@
                                                "api/generate\n")))
             (is (str/includes? message "Accept: application/json\n"))
             (is (str/includes? message "Content-Type: application/json\n"))
+            (is (str/includes? message "\"prompt\":\"Привет\\n\\\"мир\\\"\""))
             (is (str/ends-with? message (str "\n\n" (:raw-body (first @requests))))))
           (chat-model/list-models client)
           (is (= (str "Ollama request:\nGET " (:host client)

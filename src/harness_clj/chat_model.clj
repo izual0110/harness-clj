@@ -35,7 +35,7 @@
 
 (defn- request! [{:keys [host timeout-ms http-client]} method path body]
   (let [url (str (str/replace host #"/+$" "") path)
-        request-body (when body (json/write-str body))
+        request-body (when body (json/write-str body :escape-unicode false))
         builder (-> (HttpRequest/newBuilder (URI/create url))
                     (.timeout (Duration/ofMillis timeout-ms))
                     (.header "Accept" "application/json"))
