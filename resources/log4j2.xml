@@ -1,0 +1,51 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<Configuration>
+  <Properties>
+    <Property name="DEFAULT_PATTERN">%style{%d{HH:mm:ss.SSS}}{bright_black} %highlight{%-5level}{STYLE=logback} %cyan{%logger} - %msg%n</Property>
+    <Property name="REQUEST_PATTERN">%cyan{%d{HH:mm:ss.SSS} %-5level %logger -} %msg%n</Property>
+    <Property name="RESPONSE_PATTERN">%green{%d{HH:mm:ss.SSS} %-5level %logger -} %msg%n</Property>
+    <Property name="TOOL_PATTERN">%magenta{%d{HH:mm:ss.SSS} %-5level %logger -} %msg%n</Property>
+  </Properties>
+
+  <Appenders>
+    <Console name="CONSOLE" target="SYSTEM_ERR">
+      <PatternLayout charset="UTF-8">
+        <MarkerPatternSelector defaultPattern="${sys:LOG_PATTERN:-${env:LOG_PATTERN:-${DEFAULT_PATTERN}}}"
+                               disableAnsi="false" noConsoleNoAnsi="false">
+          <PatternMatch key="REQUEST" pattern="${sys:LOG_PATTERN:-${env:LOG_PATTERN:-${REQUEST_PATTERN}}}"/>
+          <PatternMatch key="RESPONSE" pattern="${sys:LOG_PATTERN:-${env:LOG_PATTERN:-${RESPONSE_PATTERN}}}"/>
+          <PatternMatch key="TOOL" pattern="${sys:LOG_PATTERN:-${env:LOG_PATTERN:-${TOOL_PATTERN}}}"/>
+        </MarkerPatternSelector>
+      </PatternLayout>
+    </Console>
+
+    <RollingFile name="FILE" fileName="logs/harness-clj.log" append="true"
+                 filePattern="logs/harness-clj.%d{yyyy-MM-dd}.%i.log.gz">
+      <PatternLayout charset="UTF-8" disableAnsi="true"
+                     pattern="%d{yyyy-MM-dd HH:mm:ss.SSS} %-5level %logger - %msg%n"/>
+      <Policies>
+        <TimeBasedTriggeringPolicy interval="1" modulate="true"/>
+        <SizeBasedTriggeringPolicy size="10 MB"/>
+      </Policies>
+      <DefaultRolloverStrategy fileIndex="nomax">
+        <Delete basePath="logs" maxDepth="1" followLinks="false">
+          <SortByModificationTime recentFirst="true"/>
+          <IfFileName regex="harness-clj\.\d{4}-\d{2}-\d{2}\.\d+\.log\.gz">
+            <IfAny>
+              <IfLastModified age="P7D"/>
+              <IfAccumulatedFileSize exceeds="100 MB"/>
+            </IfAny>
+          </IfFileName>
+        </Delete>
+      </DefaultRolloverStrategy>
+    </RollingFile>
+  </Appenders>
+
+  <Loggers>
+    <Logger name="harness-clj" level="DEBUG"/>
+    <Root level="${sys:LOG_LEVEL:-${env:LOG_LEVEL:-INFO}}">
+      <AppenderRef ref="CONSOLE"/>
+      <AppenderRef ref="FILE"/>
+    </Root>
+  </Loggers>
+</Configuration>

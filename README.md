@@ -17,5 +17,5 @@ clojure -M:outdated    # Check dependency updates
 ## Configuration
 
 - Ollama: `resources/chat-model.edn`; `:think` goes in `:defaults`, not `:options`.
-- Logging: `resources/logback.xml`; console + `logs/harness-clj.log`.
+- Logging: `resources/log4j2.xml`; console + `logs/harness-clj.log`.
 - `harness-clj.*`: `DEBUG` (includes prompts); others: `INFO` (`LOG_LEVEL`).

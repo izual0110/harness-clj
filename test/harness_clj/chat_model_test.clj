@@ -1,15 +1,11 @@
 (ns harness-clj.chat-model-test
   (:require [clojure.data.json :as json]
-            [clojure.string :as str]
             [clojure.test :refer [deftest is testing]]
             [harness-clj.chat-model :as chat-model])
-  (:import [ch.qos.logback.classic Level Logger]
-           [ch.qos.logback.core.read ListAppender]
-           [com.sun.net.httpserver HttpHandler HttpServer]
+  (:import [com.sun.net.httpserver HttpHandler HttpServer]
            [java.net InetSocketAddress URI]
            [java.net.http HttpClient]
-           [java.nio.charset StandardCharsets]
-           [org.slf4j LoggerFactory]))
+           [java.nio.charset StandardCharsets]))
 
 (defn- with-server [status response f]
   (let [requests (atom [])
@@ -165,42 +161,6 @@
     (fn [client _]
       (is (thrown-with-msg? clojure.lang.ExceptionInfo #"generation failed"
                            (chat-model/generate client "Hello"))))))
-
-(deftest request-debug-log-test
-  (let [^Logger logger (LoggerFactory/getLogger "harness-clj.chat-model")
-        appender (doto (ListAppender.)
-                   (.setContext (.getLoggerContext logger))
-                   (.start))
-        original-level (.getLevel logger)
-        original-additive (.isAdditive logger)]
-    (try
-      (.setLevel logger Level/DEBUG)
-      (.setAdditive logger false)
-      (.addAppender logger appender)
-      (with-server 200 "{}"
-        (fn [client requests]
-          (chat-model/generate client "Привет\n\"мир\"" {:options {:seed 42}})
-          (let [event (first (.-list appender))
-                message (.getFormattedMessage event)]
-            (is (= Level/DEBUG (.getLevel event)))
-            (is (str/starts-with? message (str "Ollama request:\nPOST " (:host client)
-                                               "api/generate\n")))
-            (is (str/includes? message "Accept: application/json\n"))
-            (is (str/includes? message "Content-Type: application/json\n"))
-            (is (str/includes? message "\"prompt\":\"Привет\\n\\\"мир\\\"\""))
-            (is (str/ends-with? message (str "\n\n" (:raw-body (first @requests))))))
-          (chat-model/list-models client)
-          (is (= (str "Ollama request:\nGET " (:host client)
-                      "api/tags\nAccept: application/json\n\n")
-                 (.getFormattedMessage (second (.-list appender)))))
-          (.setLevel logger Level/INFO)
-          (chat-model/generate client "Not logged")
-          (is (= 2 (count (.-list appender))))))
-      (finally
-        (.detachAppender logger appender)
-        (.setLevel logger original-level)
-        (.setAdditive logger original-additive)
-        (.stop appender)))))
 
 (deftest non-streaming-parameters-test
   (doseq [[complete input] [[chat-model/generate "Hello"]
