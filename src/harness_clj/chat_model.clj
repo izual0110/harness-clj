@@ -3,7 +3,7 @@
             [clojure.edn :as edn]
             [clojure.java.io :as io]
             [clojure.string :as str]
-            [clojure.tools.logging :as log])
+            [harness-clj.agent-log :as agent-log])
   (:import [java.net URI]
            [java.net.http HttpClient HttpRequest HttpRequest$BodyPublishers
             HttpResponse$BodyHandlers]
@@ -44,15 +44,9 @@
                           (-> builder
                               (.header "Content-Type" "application/json")
                               (.POST (HttpRequest$BodyPublishers/ofString request-body)))))
-        _ (log/debugf "Ollama request:\n%s %s\n%s\n\n%s"
-                      (.method request) (.uri request)
-                      (str/join "\n" (for [[header values] (.map (.headers request))
-                                           value values]
-                                       (str header ": " value)))
-                      (or request-body ""))
-        response (.send ^HttpClient http-client request
+        response (.send ^HttpClient http-client (agent-log/debug-ollama-request request request-body)
                         (HttpResponse$BodyHandlers/ofString StandardCharsets/UTF_8))
-        status (.statusCode response)
+        status (.statusCode (agent-log/debug-ollama-response response))
         raw-body (.body response)]
     (when-not (<= 200 status 299)
       (throw (ex-info (str "Ollama request failed: HTTP " status)

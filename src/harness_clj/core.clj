@@ -1,6 +1,6 @@
 (ns harness-clj.core
   (:require [clojure.string :as str]
-            [clojure.tools.logging :as log])
+            [harness-clj.agent-log :as agent-log])
   (:gen-class))
 
 (defn greet
@@ -9,7 +9,7 @@
 
 
 (defn -main [& args]
-  (log/debug "Starting application")
+  (agent-log/debug "Starting application")
   (println (if (seq args)
              (greet (str/join " " args))
              (greet))))

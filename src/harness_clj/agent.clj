@@ -1,7 +1,6 @@
 (ns harness-clj.agent
-  (:require [clojure.string :as str]
-            [harness-clj.chat-model :as chat-model]
-            [clojure.tools.logging :as log]))
+  (:require [harness-clj.agent-log :as agent-log]
+            [harness-clj.chat-model :as chat-model]))
 
 (def system-prompt "You are Harness, a coding agent that works in a local repository. Answer concisely.")
 
@@ -21,31 +20,29 @@
 
 (defn add-message [agent message] (swap! (:state agent) update :history conj {:role "user" :content message}))
 (defn add-assistant-message [agent message] (swap! (:state agent) update :history conj {:role "assistant" :content message}))
-
-
-(let [agent ai-agent
-      state (:state agent)
-      messages (into (:system-prompts agent) (:history @state))]
-  messages)
+(defn cleanup-messages [agent] (swap! (:state agent) assoc :history []))
 
 (defn send-message [user-message]
   (let [agent ai-agent
         _ (add-message agent user-message)
         state (:state agent)
         messages (into (:system-prompts agent) (:history @state))
-        _ (log/debugf "Messages:\n%s"
-                      (let [line-format (str "%-" (inc (count (str (count messages))))
-                                             "s [%s] %s")]
-                        (str/join "\n"
-                                  (map-indexed (fn [index {:keys [role content]}]
-                                                 (format line-format (str (inc index) ")")
-                                                         role content))
-                                               messages))))
-        response (chat-model/chat (:client agent) messages)]
+        response (chat-model/chat (:client agent) (agent-log/request messages))]
     (add-assistant-message agent (get-in response [:message :content]))
-    response))
+    (agent-log/response response)))
+
+
 
 (comment
-  (send-message "повтори"))
 
-;;(send-message "что ответил бы оптимистичный инженер на вопрос: \" Что делать, если в проекте не хватает зависимостей?\" Ответь максимально коротко.")
+  (let [agent ai-agent
+        state (:state agent)
+        messages (into (:system-prompts agent) (:history @state))]
+    messages)
+
+  (cleanup-messages ai-agent)
+  (send-message "каких знаменитостей ты знаешь? напиши коротко top 10")
+  (send-message "что ответил бы оптимистичный инженер на вопрос: \" Что делать, если в проекте не хватает зависимостей?\" Ответь максимально коротко.")
+  
+  
+  )
