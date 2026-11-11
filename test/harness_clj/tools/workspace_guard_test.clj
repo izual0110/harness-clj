@@ -1,7 +1,7 @@
 (ns harness-clj.tools.workspace-guard-test
   (:require [clojure.string :as str]
             [clojure.test :refer [deftest is testing]]
-            [harness-clj.tools.workspace-guard :as guard])
+            [harness-clj.workspace-guard :as guard])
   (:import [java.io IOException]
            [java.nio.file FileSystem FileVisitOption Files LinkOption Path Paths]
            [java.nio.file.attribute BasicFileAttributes FileAttribute]

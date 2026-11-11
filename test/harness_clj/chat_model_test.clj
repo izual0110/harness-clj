@@ -107,8 +107,8 @@
       (let [messages [{:role "system" :content "Be brief"}
                       {:role "user" :content "Hello"}]
             tools [{:type "function" :function {:name "weather"}}]
-            result (chat-model/chat client messages {:tools tools :options {:temperature 0}
-                                                     :messages []})
+            result (chat-model/chat client messages tools {:tools [] :options {:temperature 0}
+                                                           :messages []})
             body (:body (first @requests))]
         (is (= "Hi!" (get-in result [:message :content])))
         (is (= "/api/chat" (:path (first @requests))))
@@ -117,15 +117,38 @@
         (is (= 0 (get-in body [:options :temperature])))
         (is (false? (:stream body)))))))
 
+(deftest chat-tool-calls-test
+  (let [call {:function {:name "read" :arguments {:path "README.md" :limit 20}}}
+        assistant {:role "assistant" :content "" :tool_calls [call]}
+        response {:message assistant :done true}
+        tools [{:type "function"
+                :function {:name "read" :description "Read a file"
+                           :parameters {:type "object"
+                                        :properties {:path {:type "string"}
+                                                     :limit {:type "integer"}}
+                                        :required ["path"]}}}]
+        messages [{:role "user" :content "Read README.md"}]
+        tool-message {:role "tool" :tool_name "read" :content "1\t# Привет"}]
+    (with-server 200 (json/write-str response :escape-unicode false)
+      (fn [client requests]
+        (let [result (chat-model/chat client messages tools)
+              continuation (conj messages (:message result) tool-message)]
+          (is (= response result))
+          (is (= tools (get-in @requests [0 :body :tools])))
+          (chat-model/chat client continuation tools)
+          (is (= continuation (get-in @requests [1 :body :messages])))
+          (is (= tools (get-in @requests [1 :body :tools]))))))))
+
 (deftest thinking-parameters-test
-  (doseq [[complete input] [[chat-model/generate "Hello"]
-                           [chat-model/chat [{:role "user" :content "Hello"}]]]]
+  (doseq [[complete args] [[chat-model/generate ["Hello"]]
+                          [chat-model/chat [[{:role "user" :content "Hello"}] []]]]]
     (with-server 200 "{}"
       (fn [client requests]
         (let [client (assoc-in client [:defaults :think] false)]
-          (complete client input)
-          (complete client input {:think true})
-          (complete (assoc-in client [:defaults :think] true) input {:think false})
+          (apply complete client args)
+          (apply complete client (conj args {:think true}))
+          (apply complete (assoc-in client [:defaults :think] true)
+                 (conj args {:think false}))
           (is (= [false true false]
                  (mapv #(get-in % [:body :think]) @requests)))
           (is (every? #(not (contains? (get-in % [:body :options]) :think))
@@ -163,20 +186,23 @@
                            (chat-model/generate client "Hello"))))))
 
 (deftest non-streaming-parameters-test
-  (doseq [[complete input] [[chat-model/generate "Hello"]
-                            [chat-model/chat []]]]
+  (doseq [[complete args] [[chat-model/generate ["Hello"]]
+                          [chat-model/chat [[] []]]]]
     (with-server 200 "{}"
       (fn [client requests]
-        (complete (update client :defaults dissoc :stream) input)
+        (apply complete (update client :defaults dissoc :stream) args)
         (is (false? (get-in (first @requests) [:body :stream])))
-        (complete (assoc-in client [:defaults :stream] true) input {:stream false})
+        (apply complete (assoc-in client [:defaults :stream] true)
+               (conj args {:stream false}))
         (is (false? (get-in (second @requests) [:body :stream])))))))
 
 (deftest streaming-rejected-test
-  (with-server 200 "{}"
-    (fn [client requests]
-      (is (thrown-with-msg? clojure.lang.ExceptionInfo #"Streaming is not supported"
-                           (chat-model/generate client "Hello" {:stream true})))
-      (is (thrown-with-msg? clojure.lang.ExceptionInfo #"Streaming is not supported"
-                           (chat-model/chat (assoc-in client [:defaults :stream] true) [])))
-      (is (empty? @requests)))))
+  (doseq [[complete args] [[chat-model/generate ["Hello"]]
+                          [chat-model/chat [[] []]]]]
+    (with-server 200 "{}"
+      (fn [client requests]
+        (is (thrown-with-msg? clojure.lang.ExceptionInfo #"Streaming is not supported"
+                             (apply complete client (conj args {:stream true}))))
+        (is (thrown-with-msg? clojure.lang.ExceptionInfo #"Streaming is not supported"
+                             (apply complete (assoc-in client [:defaults :stream] true) args)))
+        (is (empty? @requests))))))
