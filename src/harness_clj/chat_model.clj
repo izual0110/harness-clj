@@ -73,10 +73,10 @@
 
 (defn chat
   "POST /api/chat. Messages use string roles, e.g. {:role \"user\" :content \"Hi\"}."
-  ([client messages] (chat client messages {}))
-  ([client messages params]
+  ([client messages tools] (chat client messages tools {}))
+  ([client messages tools params]
    (request! client :post "/api/chat"
-             (assoc (generation-params client params) :messages messages))))
+             (assoc (generation-params client params) :tools tools :messages messages))))
 
 (defn list-models
   "GET /api/tags. Returns the full response map, including :models."

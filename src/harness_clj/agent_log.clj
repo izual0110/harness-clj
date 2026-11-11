@@ -13,20 +13,26 @@
        (str/replace (str content) #"\r\n|\r|\n" "\n│ ")
        "\n└" (apply str (repeat (max 0 80) "─"))))
 
+(defn- message-content [{:keys [content tool_calls]}]
+  (str content
+       (when (seq tool_calls)
+         (str (when (seq content) "\n") "Tool calls: " (pr-str tool_calls)))))
+
 (defn request [messages]
   (.info logger request-marker
          (block (str "context · messages: " (count messages))
                 (str/join "\n"
-                          (map (fn [{:keys [role content]}]
+                          (map (fn [{:keys [role tool_name] :as message}]
                                  (str "[" (if (= role "system") "system prompt" role)
-                                      "] " content))
+                                      (when tool_name (str " · " tool_name))
+                                      "] " (message-content message)))
                                messages))))
   messages)
 
 (defn response [response]
-  (let [{:keys [role content] :or {role "assistant"}} (:message response)]
+  (let [{:keys [role] :or {role "assistant"} :as message} (:message response)]
     (.info logger response-marker
-           (block (str "[" role "] response") content)))
+           (block (str "[" role "] response") (message-content message))))
   response)
   
   

@@ -1,25 +1,43 @@
 (ns harness-clj.agent
-  (:require [harness-clj.agent-log :as agent-log]
-            [harness-clj.chat-model :as chat-model]))
+  (:require [clojure.data.json :as json]
+            [harness-clj.agent-log :as agent-log]
+            [harness-clj.chat-model :as chat-model]
+            [harness-clj.tools :as tools]))
 
-(def system-prompt "You are Harness, a coding agent that works in a local repository. Answer concisely.")
+(def system-prompt "You are Harness, a coding agent that works in a local repository. Use the available tools to inspect files when needed. Answer concisely.")
 
-(defn create-agent [{:keys [client system-prompts tools]}]
+(defn create-agent [{:keys [client system-prompts tools max-tool-rounds]
+                     :or {max-tool-rounds 10}}]
+  (when-not (and (integer? max-tool-rounds) (pos? max-tool-rounds))
+    (throw (ex-info ":max-tool-rounds must be a positive integer"
+                    {:max-tool-rounds max-tool-rounds})))
   {:client client
    :system-prompts system-prompts
-   :tools (into {} (map (juxt :name identity) tools))
+   :tools tools
+   :max-tool-rounds max-tool-rounds
    :state (atom
-            {:history []
-             :tool-calls 0})})
+           {:history []
+            :tool-calls 0})})
 
-(defonce ai-agent
+;;replace to defonce
+(def ai-agent
   (create-agent
-    {:client (chat-model/client)
-     :system-prompts [{:role "system" :content system-prompt}]
-     :tools []}))
+   {:client (chat-model/client)
+    :system-prompts [{:role "system" :content system-prompt}]
+    :tools (tools/specs)}))
 
-(defn add-message [agent message] (swap! (:state agent) update :history conj {:role "user" :content message}))
-(defn add-assistant-message [agent message] (swap! (:state agent) update :history conj {:role "assistant" :content message}))
+(defn- append-message [agent message]
+  (swap! (:state agent) update :history conj message))
+
+(defn add-message [agent message]
+  (append-message agent {:role "user" :content message}))
+
+(defn add-tool-message [agent tool-name message]
+  (append-message agent {:role "tool" :tool_name tool-name :content message}))
+
+(defn add-assistant-message [agent message]
+  (append-message agent {:role "assistant" :content message}))
+
 (defn cleanup-messages [agent] (swap! (:state agent) assoc :history []))
 
 (defn send-message [user-message]
@@ -27,9 +45,21 @@
         _ (add-message agent user-message)
         state (:state agent)
         messages (into (:system-prompts agent) (:history @state))
-        response (chat-model/chat (:client agent) (agent-log/request messages))]
-    (add-assistant-message agent (get-in response [:message :content]))
-    (agent-log/response response)))
+        response (-> (chat-model/chat (:client agent) (agent-log/request messages) (:tools agent))
+                     (agent-log/response))]
+    (if (not (empty? (get-in response [:message :tool_calls])))
+      (loop [tools (get-in response [:message :tool_calls])] 
+        (if (empty? tools) 
+          nil
+          (let [tool (first tools)
+                _ (println "debug" tool)
+                tool-name (get-in tool [:function :name])
+                result (tools/execute-tool tool) ] 
+            (add-tool-message agent tool-name result)
+            (recur (next tools)))))
+      (add-assistant-message agent (get-in response [:message :content]))
+      )
+    response))
 
 
 
@@ -41,8 +71,7 @@
     messages)
 
   (cleanup-messages ai-agent)
+  (send-message "какая версия Java указана в проекте. Ответь одним предложением")
   (send-message "каких знаменитостей ты знаешь? напиши коротко top 10")
   (send-message "что ответил бы оптимистичный инженер на вопрос: \" Что делать, если в проекте не хватает зависимостей?\" Ответь максимально коротко.")
-  
-  
-  )
+)
