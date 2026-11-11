@@ -32,8 +32,10 @@
 (defn add-message [agent message]
   (append-message agent {:role "user" :content message}))
 
-(defn add-tool-message [agent tool-name message]
-  (append-message agent {:role "tool" :tool_name tool-name :content message}))
+(defn add-tool-message [agent tool-call-id tool-name message]
+  (if (nil? tool-call-id)
+    (append-message agent {:role "tool" :tool_name tool-name :content message})
+    (append-message agent {:role "tool" :tool_call_id tool-call-id :tool_name tool-name :content message})))
 
 (defn add-assistant-message [agent message]
   (append-message agent {:role "assistant" :content message}))
@@ -54,11 +56,11 @@
           (let [tool (first tools)
                 _ (println "debug" tool)
                 tool-name (get-in tool [:function :name])
+                tool-call-id (get tool :id)
                 result (tools/execute-tool tool) ] 
-            (add-tool-message agent tool-name result)
+            (add-tool-message agent tool-call-id tool-name result)
             (recur (next tools)))))
-      (add-assistant-message agent (get-in response [:message :content]))
-      )
+      (add-assistant-message agent (get-in response [:message :content])))
     response))
 
 
