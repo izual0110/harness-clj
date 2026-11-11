@@ -1,7 +1,8 @@
 (ns harness-clj.workspace-guard
   (:refer-clojure :exclude [resolve])
   (:require [clojure.java.io :as io]
-            [clojure.string :as str])
+            [clojure.string :as str]
+            [harness-clj.utils :refer [error]])
   (:import [java.io IOException]
            [java.nio.file Files InvalidPathException LinkOption NoSuchFileException Path]
            [java.nio.file.attribute BasicFileAttributes]))
@@ -15,9 +16,6 @@
   "Create a workspace guard with an absolute, normalized root."
   [root]
   {:root (-> (path root) .toAbsolutePath .normalize)})
-
-(defn- error [& parts]
-  {:isError true :content (apply str parts)})
 
 (defn real-path ^Path [^Path path]
   (.toRealPath path (make-array LinkOption 0)))
@@ -40,6 +38,10 @@
                        (when (or (nil? parent) (symbolic-link? candidate))
                          (throw e))))]
       (or resolved (recur parent)))))
+
+
+;;(resolve (create-guard ".") "pom.xml")
+
 
 (defn resolve
   "Return a normalized absolute Path, or an {:isError true :content ...} map.

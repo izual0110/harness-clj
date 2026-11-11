@@ -58,7 +58,7 @@
                 tool-name (get-in tool [:function :name])
                 tool-call-id (get tool :id)
                 result (tools/execute-tool tool) ] 
-            (add-tool-message agent tool-call-id tool-name result)
+            (add-tool-message agent tool-call-id tool-name (:content result))
             (recur (next tools)))))
       (add-assistant-message agent (get-in response [:message :content])))
     response))
