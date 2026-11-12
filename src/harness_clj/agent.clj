@@ -1,20 +1,20 @@
 (ns harness-clj.agent
-  (:require [clojure.data.json :as json]
-            [harness-clj.agent-log :as agent-log]
+  (:require [harness-clj.agent-log :as agent-log]
             [harness-clj.chat-model :as chat-model]
-            [harness-clj.tools :as tools]))
+            [harness-clj.tools :as tools]
+            [harness-clj.utils :refer [error]]))
 
 (def system-prompt "You are Harness, a coding agent that works in a local repository. Use the available tools to inspect files when needed. Answer concisely.")
 
-(defn create-agent [{:keys [client system-prompts tools max-tool-rounds]
-                     :or {max-tool-rounds 10}}]
-  (when-not (and (integer? max-tool-rounds) (pos? max-tool-rounds))
-    (throw (ex-info ":max-tool-rounds must be a positive integer"
-                    {:max-tool-rounds max-tool-rounds})))
+(defn create-agent [{:keys [client system-prompts tools max-turns]
+                     :or {max-turns 10}}]
+  (when-not (and (integer? max-turns) (pos? max-turns))
+    (throw (ex-info ":max-turns must be a positive integer"
+                    {:max-turns max-turns})))
   {:client client
    :system-prompts system-prompts
    :tools tools
-   :max-tool-rounds max-tool-rounds
+   :max-turns max-turns
    :state (atom
            {:history []
             :tool-calls 0})})
@@ -25,6 +25,8 @@
    {:client (chat-model/client)
     :system-prompts [{:role "system" :content system-prompt}]
     :tools (tools/specs)}))
+
+;;ai-agent
 
 (defn- append-message [agent message]
   (swap! (:state agent) update :history conj message))
@@ -45,19 +47,23 @@
 (defn send-message [user-message]
   (let [agent ai-agent
         _ (add-message agent user-message)
-        state (:state agent)
-        messages (into (:system-prompts agent) (:history @state))
-        response (-> (chat-model/chat (:client agent) (agent-log/request messages) (:tools agent))
-                     (agent-log/response))]
-    (if (not (empty? (get-in response [:message :tool_calls])))
-      (doseq [tool (get-in response [:message :tool_calls])
-              :let [_ (println "debug" tool)
-                    tool-name (get-in tool [:function :name])
-                    tool-call-id (get tool :id)
-                    result (tools/execute-tool tool)]] 
-        (add-tool-message agent tool-call-id tool-name (:content result)))
-      (add-assistant-message agent (get-in response [:message :content])))
-    response))
+        state (:state agent)]
+    (loop [max-turns (:max-turns agent)]
+      (if (= 0 max-turns)
+        (do (agent-log/turn-limit-reached (:max-turns agent))
+            (error "Достигнут предел в " (:max-turns agent) " итераций — задача не завершена."))
+        (let [messages (into (:system-prompts agent) (:history @state))
+              response (-> (chat-model/chat (:client agent) (agent-log/request messages) (:tools agent))
+                           (agent-log/response))]
+          (if (not (empty? (get-in response [:message :tool_calls])))
+            (do (doseq [tool (get-in response [:message :tool_calls])
+                        :let [_ (println "debug" tool)
+                              tool-name (get-in tool [:function :name])
+                              tool-call-id (get tool :id)
+                              result (tools/execute-tool tool)]]
+                  (add-tool-message agent tool-call-id tool-name (:content result)))
+                (recur (dec max-turns)))
+            (add-assistant-message agent (get-in response [:message :content]))))))))
 
 
 

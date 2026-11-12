@@ -60,3 +60,6 @@
                           (for [[header values] (.map (.headers response)) value values] (str header ": " value))) "\n\n"
                 (or (.body response) "")))))
   response)
+
+(defn turn-limit-reached [_]
+  )
