@@ -57,8 +57,7 @@
                            (agent-log/response))]
           (if (not (empty? (get-in response [:message :tool_calls])))
             (do (doseq [tool (get-in response [:message :tool_calls])
-                        :let [_ (println "debug" tool)
-                              tool-name (get-in tool [:function :name])
+                        :let [tool-name (get-in tool [:function :name])
                               tool-call-id (get tool :id)
                               result (tools/execute-tool tool)]]
                   (agent-log/tool tool result)

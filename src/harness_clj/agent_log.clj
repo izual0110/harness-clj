@@ -25,9 +25,7 @@
          (block (str "context · messages: " (count messages))
                 (str/join "\n"
                           (map (fn [{:keys [role tool_name] :as message}]
-                                 (str "[" (if (= role "system") "system prompt" role)
-                                      (when tool_name (str " · " tool_name))
-                                      "] " (message-content message)))
+                                 (str "[" role (when tool_name (str "/" tool_name))"] " (message-content message)))
                                messages))))
   messages)
 
