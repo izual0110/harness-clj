@@ -7,6 +7,8 @@
 (def ^:private ^Marker request-marker (MarkerManager/getMarker "REQUEST"))
 (def ^:private ^Marker response-marker (MarkerManager/getMarker "RESPONSE"))
 (def ^:private ^Marker debug-marker (MarkerManager/getMarker "DEBUG"))
+(def ^:private ^Marker error-marker (MarkerManager/getMarker "ERROR"))
+(def ^:private ^Marker tool-marker (MarkerManager/getMarker "TOOL"))
 
 (defn- block [title content]
   (str "┌─ " title "\n│ "
@@ -36,6 +38,14 @@
   response)
   
   
+(defn turn-limit-reached [max-turns]  
+  (.info logger error-marker
+         (block "Error" "Max turns limit reached!")))
+
+(defn tool [tool result]
+  (.info logger response-marker
+         (block (str "[" (get-in tool [:function :name]) "] tool") result)))
+
 
 (defn debug [message & args]
   (when (.isDebugEnabled logger debug-marker)
@@ -60,6 +70,3 @@
                           (for [[header values] (.map (.headers response)) value values] (str header ": " value))) "\n\n"
                 (or (.body response) "")))))
   response)
-
-(defn turn-limit-reached [_]
-  )

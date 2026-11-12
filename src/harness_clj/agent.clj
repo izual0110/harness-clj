@@ -61,6 +61,7 @@
                               tool-name (get-in tool [:function :name])
                               tool-call-id (get tool :id)
                               result (tools/execute-tool tool)]]
+                  (agent-log/tool tool result)
                   (add-tool-message agent tool-call-id tool-name (:content result)))
                 (recur (dec max-turns)))
             (add-assistant-message agent (get-in response [:message :content]))))))))

@@ -5,6 +5,7 @@
     <Property name="REQUEST_PATTERN">%cyan{%msg}%n</Property>
     <Property name="RESPONSE_PATTERN">%cyan{%msg}%n</Property>
     <Property name="DEBUG_PATTERN">%green{%msg}%n</Property>
+    <Property name="ERROR_PATTERN">%red{%msg}%n</Property>
     <Property name="TOOL_PATTERN">%magenta{%d{HH:mm:ss.SSS} %-5level %logger -} %msg%n</Property>
   </Properties>
 
@@ -17,6 +18,7 @@
           <PatternMatch key="RESPONSE" pattern="${sys:LOG_PATTERN:-${env:LOG_PATTERN:-${RESPONSE_PATTERN}}}"/>
           <PatternMatch key="TOOL" pattern="${sys:LOG_PATTERN:-${env:LOG_PATTERN:-${TOOL_PATTERN}}}"/>
           <PatternMatch key="DEBUG" pattern="${sys:LOG_PATTERN:-${env:LOG_PATTERN:-${DEBUG_PATTERN}}}"/>
+          <PatternMatch key="ERROR" pattern="${sys:LOG_PATTERN:-${env:LOG_PATTERN:-${ERROR_PATTERN}}}"/>
         </MarkerPatternSelector>
       </PatternLayout>
     </Console>
