@@ -26,8 +26,6 @@
     :system-prompts [{:role "system" :content system-prompt}]
     :tools (tools/specs)}))
 
-;;ai-agent
-
 (defn- append-message [agent message]
   (swap! (:state agent) update :history conj message))
 
@@ -42,30 +40,38 @@
 (defn add-assistant-message [agent message]
   (append-message agent {:role "assistant" :content message}))
 
-(defn cleanup-messages [agent] (swap! (:state agent) assoc :history []))
+(defn cleanup-messages [agent]
+  (swap! (:state agent) assoc :history []))
+
+(defn- execute-tool-call [agent tool-call]
+  (let [tool-name (get-in tool-call [:function :name])
+        tool-call-id (:id tool-call)
+        result (tools/execute-tool tool-call)]
+    (agent-log/tool tool-call result)
+    (add-tool-message agent tool-call-id tool-name (:content result))))
 
 (defn send-message [user-message]
   (let [agent ai-agent
-        _ (add-message agent user-message)
         state (:state agent)]
-    (loop [max-turns (:max-turns agent)]
-      (if (= 0 max-turns)
-        (do (agent-log/turn-limit-reached (:max-turns agent))
-            (error "Достигнут предел в " (:max-turns agent) " итераций — задача не завершена."))
+    (add-message agent user-message)
+    (loop [remaining-turns (:max-turns agent)]
+      (if (zero? remaining-turns)
+        (do
+          (agent-log/turn-limit-reached (:max-turns agent))
+          (error "Достигнут предел в " (:max-turns agent) " итераций — задача не завершена."))
         (let [messages (into (:system-prompts agent) (:history @state))
-              response (-> (chat-model/chat (:client agent) (agent-log/request messages) (:tools agent))
-                           (agent-log/response))]
-          (if (not (empty? (get-in response [:message :tool_calls])))
-            (do (doseq [tool (get-in response [:message :tool_calls])
-                        :let [tool-name (get-in tool [:function :name])
-                              tool-call-id (get tool :id)
-                              result (tools/execute-tool tool)]]
-                  (agent-log/tool tool result)
-                  (add-tool-message agent tool-call-id tool-name (:content result)))
-                (recur (dec max-turns)))
-            (add-assistant-message agent (get-in response [:message :content]))))))))
-
-
+              response (-> (chat-model/chat (:client agent)
+                                            (agent-log/request messages)
+                                            (:tools agent))
+                           (agent-log/response))
+              message (:message response)
+              tool-calls (:tool_calls message)]
+          (if (seq tool-calls)
+            (do
+              (doseq [tool-call tool-calls]
+                (execute-tool-call agent tool-call))
+              (recur (dec remaining-turns)))
+            (add-assistant-message agent (:content message))))))))
 
 (comment
 
@@ -77,5 +83,4 @@
   (cleanup-messages ai-agent)
   (send-message "какая версия Java указана в проекте. Ответь одним предложением")
   (send-message "каких знаменитостей ты знаешь? напиши коротко top 10")
-  (send-message "что ответил бы оптимистичный инженер на вопрос: \" Что делать, если в проекте не хватает зависимостей?\" Ответь максимально коротко.")
-)
+  (send-message "что ответил бы оптимистичный инженер на вопрос: \" Что делать, если в проекте не хватает зависимостей?\" Ответь максимально коротко."))

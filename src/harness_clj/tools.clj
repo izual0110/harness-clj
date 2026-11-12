@@ -9,13 +9,15 @@
 
 (def ^:private default-limit 2000)
 
+(defn- file-exists [path] (Files/exists path (make-array LinkOption 0)))
+(defn- directory? [path] (Files/isDirectory path (make-array LinkOption 0)))
+
 (defn- read-file [workspace {:keys [file-path offset limit]}]
   (let [path (workspace-guard/resolve workspace file-path)]
     (cond
       (:isError path) path
-
-      (not (Files/exists path (make-array LinkOption 0))) (error "файл не найден: " file-path)
-      (Files/isDirectory path (make-array LinkOption 0)) (error file-path " — это папка, а не файл")
+      (not (file-exists path)) (error "файл не найден: " file-path)
+      (directory? path) (error file-path " — это папка, а не файл")
       :else (try
               (let [lines (Files/readAllLines path)
               line-count (count lines)
