@@ -25,7 +25,7 @@
          (block (str "context · messages: " (count messages))
                 (str/join "\n"
                           (map (fn [{:keys [role tool_name] :as message}]
-                                 (str "[" role (when tool_name (str "/" tool_name))"] " (message-content message)))
+                                 (str "[" role "]" (when tool_name (str "[" tool_name "]")) " " (message-content message)))
                                messages))))
   messages)
 
@@ -38,11 +38,12 @@
   
 (defn turn-limit-reached [max-turns]  
   (.info logger error-marker
-         (block "Error" "Max turns limit reached!")))
+         (block "Error" (str "Max turns [" max-turns "] limit reached!"))))
 
-(defn tool [tool result]
+(defn tool [tool {:keys [isError content]}]
   (.info logger response-marker
-         (block (str "[" (get-in tool [:function :name]) "] tool") result)))
+         (block (str "[tool][" (get-in tool [:function :name]) "]" (when isError " error")) content)))
+
 
 
 (defn debug [message & args]
