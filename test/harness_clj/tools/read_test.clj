@@ -1,6 +1,5 @@
 (ns harness-clj.tools.read-test
-  (:require [clojure.data.json :as json]
-            [clojure.java.io :as io]
+  (:require [clojure.java.io :as io]
             [clojure.string :as str]
             [clojure.test :refer [deftest is testing]]
             [harness-clj.tools :as tools])
@@ -36,10 +35,8 @@
         (is (= (read-file path) (read-file (.toAbsolutePath path))))
         (is (= "" (with-out-str (read-file path))))
         (is (= (read-file path)
-               (json/read-str
-                (tools/execute-tool {:function {:name "Read"
-                                                :arguments {:file-path (str path)}}})
-                :key-fn keyword)))))))
+               (tools/execute-tool {:function {:name "Read"
+                                              :arguments {:file-path (str path)}}})))))))
 
 (deftest read-file-pagination-test
   (with-temp-directory
@@ -82,6 +79,9 @@
                                 (make-array OpenOption 0))]
         (is (= {:isError true :content (str "файл не найден: " missing)}
                (read-file missing)))
+        (is (= (read-file missing)
+               (tools/execute-tool {:function {:name "Read"
+                                              :arguments {:file-path (str missing)}}})))
         (is (= {:isError true :content (str directory " — это папка, а не файл")}
                (read-file directory)))
         (is (= {:isError false :content "файл пустой"}

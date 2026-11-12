@@ -34,6 +34,8 @@
 
 (deftest execute-tool-test
   (doseq [result ["Привет" {:path "файл.txt" :lines ["один" "два"]}
+                  {:isError false :content "Привет"}
+                  {:isError true :content "File not found"}
                   [1 2 3] 42 nil false]]
     (testing (pr-str result)
       (let [executions (atom [])
@@ -44,11 +46,12 @@
                                       result))}
             call {:function {:name "Read" :arguments arguments}}
             output (tools/execute-tool registry call)]
-        (is (string? output))
-        (is (= result (json/read-str output :key-fn keyword)))
+        (is (= result output))
+        (is (identical? result output))
         (is (= [arguments] @executions))
         (with-redefs [tools/tools registry]
-          (is (= output (tools/execute-tool call))))))))
+          (is (identical? result (tools/execute-tool call))))
+        (is (= [arguments arguments] @executions))))))
 
 (deftest unknown-tool-test
   (let [registry {"Read" (assoc read-definition :call
