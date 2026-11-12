@@ -50,16 +50,12 @@
         response (-> (chat-model/chat (:client agent) (agent-log/request messages) (:tools agent))
                      (agent-log/response))]
     (if (not (empty? (get-in response [:message :tool_calls])))
-      (loop [tools (get-in response [:message :tool_calls])] 
-        (if (empty? tools) 
-          nil
-          (let [tool (first tools)
-                _ (println "debug" tool)
-                tool-name (get-in tool [:function :name])
-                tool-call-id (get tool :id)
-                result (tools/execute-tool tool) ] 
-            (add-tool-message agent tool-call-id tool-name (:content result))
-            (recur (next tools)))))
+      (doseq [tool (get-in response [:message :tool_calls])
+              :let [_ (println "debug" tool)
+                    tool-name (get-in tool [:function :name])
+                    tool-call-id (get tool :id)
+                    result (tools/execute-tool tool)]] 
+        (add-tool-message agent tool-call-id tool-name (:content result)))
       (add-assistant-message agent (get-in response [:message :content])))
     response))
 
