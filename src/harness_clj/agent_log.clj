@@ -25,7 +25,7 @@
          (block (str "context · messages: " (count messages))
                 (str/join "\n"
                           (map (fn [{:keys [role tool_name] :as message}]
-                                 (str "[" role "]" (when tool_name (str "[" tool_name "]")) " " (message-content message)))
+                                 (str "[" role "]" (if (nil? tool_name) " " (str "[" tool_name "]\n"))  (message-content message)))
                                messages))))
   messages)
 
@@ -42,7 +42,7 @@
 
 (defn tool [tool {:keys [isError content]}]
   (.info logger response-marker
-         (block (str "[tool][" (get-in tool [:function :name]) "]" (when isError " error")) content)))
+         (block (str "[tool][" (get-in tool [:function :name]) "] " (get-in tool [:function :arguments]) (when isError " error")) content)))
 
 
 
