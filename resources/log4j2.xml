@@ -6,7 +6,7 @@
     <Property name="RESPONSE_PATTERN">%cyan{%msg}%n</Property>
     <Property name="DEBUG_PATTERN">%green{%msg}%n</Property>
     <Property name="ERROR_PATTERN">%red{%msg}%n</Property>
-    <Property name="TOOL_PATTERN">%magenta{%d{HH:mm:ss.SSS} %-5level %logger -} %msg%n</Property>
+    <Property name="TOOL_PATTERN">%magenta{%msg}%n</Property>
   </Properties>
 
   <Appenders>
