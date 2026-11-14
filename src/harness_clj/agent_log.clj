@@ -12,17 +12,17 @@
 (def ^:private ^Integer max-content-lines 10)
 
 (defn- block [title content]
-  (let [lines (str/split (str content) #"\r\n|\r|\n" (inc max-content-lines))]
-    (str "┌─ " title "\n│ "
-         (str/join "\n│ " (take max-content-lines lines))
-         (when (> (count lines) max-content-lines) "\n│ ...")
-         "\n└" (apply str (repeat (max 0 80) "─")))))
-
+  (str "┌─ " title "\n│ "
+       (str/replace (str content) #"\r\n|\r|\n" "\n│ ")
+       "\n└" (apply str (repeat (max 0 80) "─"))))
 
 (defn- message-content [{:keys [content tool_calls]}]
-  (str content
-       (when (seq tool_calls)
-         (str (when (seq content) "\n") "Tool calls: " (pr-str tool_calls)))))
+  (let [text (str content
+                  (when (seq tool_calls)
+                    (str (when (seq content) "\n") "Tool calls: " (pr-str tool_calls))))
+        lines (str/split text #"\r\n|\r|\n" (inc max-content-lines))]
+    (str (str/join "\n" (take max-content-lines lines))
+         (when (> (count lines) max-content-lines) "\n..."))))
 
 (defn request [messages]
   (.info logger request-marker
@@ -44,9 +44,10 @@
   (.info logger error-marker
          (block "Error" (str "Max turns [" max-turns "] limit reached!"))))
 
-(defn tool [tool {:keys [isError content]}]
-  (.info logger response-marker
-         (block (str "[tool][" (get-in tool [:function :name]) "] " (get-in tool [:function :arguments]) (when isError " error")) content)))
+(defn tool [tool {:keys [isError] :as result}]
+  (.info logger tool-marker
+         (block (str "[tool][" (get-in tool [:function :name]) "] " (get-in tool [:function :arguments]) (when isError " error"))
+                (message-content result))))
 
 
 

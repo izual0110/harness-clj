@@ -1,12 +1,12 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <Configuration>
   <Properties>
-    <Property name="DEFAULT_PATTERN">%style{%d{HH:mm:ss.SSS}}{bright_black} %highlight{%-5level}{STYLE=logback} %cyan{%logger} - %msg%n</Property>
-    <Property name="REQUEST_PATTERN">%cyan{%msg}%n</Property>
-    <Property name="RESPONSE_PATTERN">%cyan{%msg}%n</Property>
-    <Property name="DEBUG_PATTERN">%green{%msg}%n</Property>
-    <Property name="ERROR_PATTERN">%red{%msg}%n</Property>
-    <Property name="TOOL_PATTERN">%magenta{%msg}%n</Property>
+    <Property name="DEFAULT_PATTERN">%style{%d{yyyy-MM-dd HH:mm:ss.SSS}}{bright_black} %highlight{%-5level}{STYLE=logback} %cyan{%logger} - %msg%n</Property>
+    <Property name="REQUEST_PATTERN">%style{%d{yyyy-MM-dd HH:mm:ss.SSS}}{bright_black} %n%cyan{%msg}%n</Property>
+    <Property name="RESPONSE_PATTERN">%style{%d{yyyy-MM-dd HH:mm:ss.SSS}}{bright_black} %n%cyan{%msg}%n</Property>
+    <Property name="DEBUG_PATTERN">%style{%d{yyyy-MM-dd HH:mm:ss.SSS}}{bright_black} %n%green{%msg}%n</Property>
+    <Property name="ERROR_PATTERN">%style{%d{yyyy-MM-dd HH:mm:ss.SSS}}{bright_black} %n%red{%msg}%n</Property>
+    <Property name="TOOL_PATTERN">%style{%d{yyyy-MM-dd HH:mm:ss.SSS}}{bright_black} %n%magenta{%msg}%n</Property>
   </Properties>
 
   <Appenders>
