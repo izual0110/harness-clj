@@ -1,6 +1,7 @@
 (ns harness-clj.test-runner
   (:require [clojure.test :as test]
             [harness-clj.agent-test]
+            [harness-clj.agent-log-test]
             [harness-clj.core-test]
             [harness-clj.chat-model-test]
             [harness-clj.tools-test]
@@ -10,6 +11,7 @@
 
 (defn -main [& _args]
   (let [{:keys [fail error]} (test/run-tests 'harness-clj.agent-test
+                                          'harness-clj.agent-log-test
                                           'harness-clj.core-test
                                           'harness-clj.chat-model-test
                                           'harness-clj.tools-test
