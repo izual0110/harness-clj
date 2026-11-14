@@ -119,26 +119,26 @@
               
                 :call (partial read-file guard)}
               
-               ;; "Glob"
-               ;; {:description (str "Finds files by name pattern. Use this when you know what a file is called but not where it is.
-               ;;                            Usage:
-               ;;                            - Supports patterns like \"**/*.java\" or \"**/Tool*.java\"
-               ;;                            - Returns paths relative to the project root, most recently modified first
-               ;;                            - Skips .git, .cpcache, target, and symbolic links
-               ;;                            - Returns at most " glob-max-results " results")
-               ;;  :parameters
-               ;;  {:type "object"
-               ;;   :properties {:pattern {:type "string" :description "Glob pattern, for example **/*.java or **/Tool*.java"}
-               ;;                :path {:type "string" :description "Directory to search in, defaults to project root"}}
-               ;;   :required ["pattern"]}
-              ;; 
-               ;;  :call (partial glob-files guard)}
+               "Glob"
+               {:description (str "Finds files by name pattern. Use this when you know what a file is called but not where it is.
+                                          Usage:
+                                          - Supports patterns like \"**/*.java\" or \"**/Tool*.java\"
+                                          - Returns paths relative to the project root, most recently modified first
+                                          - Skips .git, .cpcache, target, and symbolic links
+                                          - Returns at most " glob-max-results " results")
+                :parameters
+                {:type "object"
+                 :properties {:pattern {:type "string" :description "Glob pattern, for example **/*.java or **/Tool*.java"}
+                              :path {:type "string" :description "Directory to search in, defaults to project root"}}
+                 :required ["pattern"]}
+              
+                :call (partial glob-files guard)}
                
                }]
                 {:guard guard
                  :tools tools
                  :specs (specs tools)
-                 :exec (partial execute-tool tools)}))
+                 :exec-fn (partial execute-tool tools)}))
 
 
 

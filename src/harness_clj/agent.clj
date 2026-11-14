@@ -50,7 +50,7 @@
 (defn- execute-tool-call [agent tool-call]
   (let [tool-name (get-in tool-call [:function :name])
         tool-call-id (:id tool-call)
-        execute-tool (get-in agent [:tools :exec])
+        execute-tool (get-in agent [:tools :exec-fn])
         result (execute-tool tool-call)]
     (agent-log/tool tool-call result)
     (add-tool-message agent tool-call-id tool-name (:content result))))
