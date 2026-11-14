@@ -5,16 +5,21 @@
             [harness-clj.chat-model :as chat-model]
             [harness-clj.tools :as tools]))
 
+(defn- test-tools [registry]
+  {:tools registry
+   :specs (#'tools/specs registry)
+   :exec-fn (partial #'tools/execute-tool registry)})
+
 (deftest initial-history-test
   (let [ai-agent (agent/create-agent {:client ::client
                                      :system-prompts [{:role "system" :content "Be brief"}]
-                                     :tools []})]
+                                     :tools (test-tools {})})]
     (is (= {:history [] :tool-calls 0} @(:state ai-agent)))))
 
 (deftest message-history-test
   (let [ai-agent (agent/create-agent {:client ::client
                                      :system-prompts []
-                                     :tools []})]
+                                     :tools (test-tools {})})]
     (agent/add-message ai-agent "Hello")
     (agent/add-assistant-message ai-agent "Hi!")
     (agent/add-message ai-agent "What next?")
@@ -24,7 +29,7 @@
            (:history @(:state ai-agent))))))
 
 (deftest tool-message-history-test
-  (let [ai-agent (agent/create-agent {:client ::client :system-prompts [] :tools []})]
+  (let [ai-agent (agent/create-agent {:client ::client :system-prompts [] :tools (test-tools {})})]
     (agent/add-tool-message ai-agent "call-read" "Read" "File contents")
     (agent/add-tool-message ai-agent nil "Read" "More contents")
     (is (= [{:role "tool" :tool_call_id "call-read" :tool_name "Read"
@@ -33,7 +38,7 @@
            (:history @(:state ai-agent))))))
 
 (deftest cleanup-messages-test
-  (let [ai-agent (agent/create-agent {:client ::client :system-prompts [] :tools []})]
+  (let [ai-agent (agent/create-agent {:client ::client :system-prompts [] :tools (test-tools {})})]
     (agent/add-message ai-agent "Hello")
     (agent/add-assistant-message ai-agent "Hi!")
     (agent/cleanup-messages ai-agent)
@@ -52,7 +57,7 @@
   (let [ai-agent (agent/create-agent {:client ::client
                                      :system-prompts [{:role "system" :content "Be brief"}
                                                       {:role "system" :content "Be helpful"}]
-                                     :tools []})
+                                     :tools (test-tools {})})
         requests (atom [])
         responses [{:model "test-model"
                     :message {:role "assistant" :content "Hi!"}
@@ -94,7 +99,7 @@
 (deftest empty-tool-calls-test
   (doseq [calls [nil []]]
     (testing (pr-str calls)
-      (let [ai-agent (agent/create-agent {:client ::client :system-prompts [] :tools []})
+      (let [ai-agent (agent/create-agent {:client ::client :system-prompts [] :tools (test-tools {})})
             response {:message {:role "assistant" :content "Done" :tool_calls calls}}]
         (with-redefs [agent/ai-agent ai-agent
                       chat-model/chat (recording-chat (atom []) [response])]
@@ -121,17 +126,17 @@
                                 (fn [arguments]
                                   (swap! executions conj arguments)
                                   {:isError false :content "1\t# Project"}))}
-        tool-specs (tools/specs registry)
+        tool-set (test-tools registry)
+        tool-specs (:specs tool-set)
         ai-agent (agent/create-agent {:client ::client
                                      :system-prompts [{:role "system" :content "Be brief"}]
-                                     :tools tool-specs})
+                                     :tools tool-set})
         call (assoc (read-call {:file-path "README.md"}) :id "call-read" :type "function")
         response {:message {:role "assistant" :content "I'll read it." :tool_calls [call]}}
         final-response {:message {:role "assistant" :content "This is Project."}}
         requests (atom [])
         user {:role "user" :content "Describe this project"}]
     (with-redefs [agent/ai-agent ai-agent
-                  tools/tools registry
                   chat-model/chat (recording-chat requests [response final-response])]
       (let [result (agent/send-message (:content user))]
         (is (= @(:state ai-agent) result))))
@@ -153,14 +158,13 @@
                                   (swap! executions conj file-path)
                                   {:isError false :content (str file-path ": Привет")}))}
         ai-agent (agent/create-agent {:client ::client :system-prompts []
-                                     :tools (tools/specs registry)})
+                                     :tools (test-tools registry)})
         response {:message {:role "assistant" :content ""
                             :tool_calls (mapv #(read-call {:file-path %})
                                               ["one.clj" "two.clj" "three.clj"])}}
         final-response {:message {:role "assistant" :content "Read all three."}}
         requests (atom [])]
     (with-redefs [agent/ai-agent ai-agent
-                  tools/tools registry
                   chat-model/chat (recording-chat requests [response final-response])]
       (let [result (agent/send-message "Read three files")]
         (is (= @(:state ai-agent) result))))
@@ -177,13 +181,12 @@
   (let [tool-error {:isError true :content "файл не найден: missing.clj"}
         registry {"Read" (assoc read-definition :call (constantly tool-error))}
         ai-agent (agent/create-agent {:client ::client :system-prompts []
-                                     :tools (tools/specs registry)})
+                                     :tools (test-tools registry)})
         call (read-call {:file-path "missing.clj"})
         response {:message {:role "assistant" :tool_calls [call]}}
         final-response {:message {:role "assistant" :content "File unavailable."}}
         requests (atom [])]
     (with-redefs [agent/ai-agent ai-agent
-                  tools/tools registry
                   chat-model/chat (recording-chat requests [response final-response])]
       (let [result (agent/send-message "Read the missing file")]
         (is (= @(:state ai-agent) result))))
@@ -194,19 +197,20 @@
       (is (= (:message final-response) (last (:history @(:state ai-agent))))))))
 
 (deftest successive-tool-rounds-test
-  (let [ai-agent (agent/create-agent {:client ::client :system-prompts [] :tools []
-                                     :max-turns 3})
+  (let [executions (atom [])
+        ai-agent (agent/create-agent
+                  {:client ::client :system-prompts [] :max-turns 3
+                   :tools {:specs []
+                           :exec-fn (fn [call]
+                                      (swap! executions conj call)
+                                      {:isError false :content (get-in call [:function :arguments :file-path])})}})
         first-call (read-call {:file-path "one.clj"})
         second-call (read-call {:file-path "two.clj"})
         responses [{:message {:role "assistant" :content "" :tool_calls [first-call]}}
                    {:message {:role "assistant" :content "" :tool_calls [second-call]}}
                    {:message {:role "assistant" :content "Done"}}]
-        requests (atom [])
-        executions (atom [])]
+        requests (atom [])]
     (with-redefs [agent/ai-agent ai-agent
-                  tools/execute-tool (fn [call]
-                                       (swap! executions conj call)
-                                       {:isError false :content (get-in call [:function :arguments :file-path])})
                   chat-model/chat (recording-chat requests responses)]
       (let [result (agent/send-message "Read both files")]
         (is (= @(:state ai-agent) result))))
@@ -221,19 +225,20 @@
 
 (deftest turn-limit-test
   (doseq [limit [1 2]]
-    (let [ai-agent (agent/create-agent {:client ::client :system-prompts [] :tools []
-                                       :max-turns limit})
+    (let [executions (atom 0)
+          ai-agent (agent/create-agent
+                    {:client ::client :system-prompts [] :max-turns limit
+                     :tools {:specs []
+                             :exec-fn (fn [_]
+                                        (swap! executions inc)
+                                        {:isError false :content "Contents"})}})
           response {:message {:role "assistant" :content ""
                               :tool_calls [(read-call {:file-path "one.clj"})
                                            (read-call {:file-path "two.clj"})]}}
           requests (atom [])
-          executions (atom 0)
           limit-events (atom [])]
       (with-redefs [agent/ai-agent ai-agent
                     agent-log/turn-limit-reached #(swap! limit-events conj %)
-                    tools/execute-tool (fn [_]
-                                         (swap! executions inc)
-                                         {:isError false :content "Contents"})
                     chat-model/chat (recording-chat requests (repeat limit response))]
         (is (= {:isError true
                 :content (str "Достигнут предел в " limit " итераций — задача не завершена.")}
@@ -245,8 +250,10 @@
 
 (deftest final-answer-on-last-turn-test
   (doseq [limit [1 2]]
-    (let [ai-agent (agent/create-agent {:client ::client :system-prompts [] :tools []
-                                       :max-turns limit})
+    (let [ai-agent (agent/create-agent
+                    {:client ::client :system-prompts [] :max-turns limit
+                     :tools {:specs []
+                             :exec-fn (constantly {:isError false :content "Contents"})}})
           tool-response {:message {:role "assistant" :content ""
                                    :tool_calls [(read-call {:file-path "one.clj"})]}}
           final-response {:message {:role "assistant" :content "Done"}}
@@ -255,7 +262,6 @@
           limit-events (atom [])]
       (with-redefs [agent/ai-agent ai-agent
                     agent-log/turn-limit-reached #(swap! limit-events conj %)
-                    tools/execute-tool (constantly {:isError false :content "Contents"})
                     chat-model/chat (recording-chat requests responses)]
         (let [result (agent/send-message "Read and answer")]
           (is (= @(:state ai-agent) result))
@@ -273,7 +279,12 @@
     (is (thrown-with-msg? clojure.lang.ExceptionInfo #":max-turns must be a positive integer"
                          (agent/create-agent {:max-turns limit})))))
 
-(deftest default-read-tool-test
-  (is (fn? (get-in tools/tools ["Read" :call])))
-  (is (= (tools/specs) (:tools agent/ai-agent)))
-  (is (= "Read" (get-in agent/ai-agent [:tools 0 :function :name]))))
+(deftest default-tools-test
+  (let [tool-set (:tools agent/ai-agent)]
+    (is (identical? (:guard agent/ai-agent) (:guard tool-set)))
+    (is (fn? (get-in tool-set [:tools "Read" :call])))
+    (is (fn? (get-in tool-set [:tools "Glob" :call])))
+    (is (fn? (:exec-fn tool-set)))
+    (is (= (:specs (tools/create-tools (:guard agent/ai-agent))) (:specs tool-set)))
+    (is (= #{"Read" "Glob"}
+           (set (map #(get-in % [:function :name]) (:specs tool-set)))))))

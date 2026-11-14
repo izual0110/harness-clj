@@ -4,6 +4,7 @@
             [harness-clj.core-test]
             [harness-clj.chat-model-test]
             [harness-clj.tools-test]
+            [harness-clj.tools.glob-test]
             [harness-clj.tools.read-test]
             [harness-clj.tools.workspace-guard-test]))
 
@@ -12,6 +13,7 @@
                                           'harness-clj.core-test
                                           'harness-clj.chat-model-test
                                           'harness-clj.tools-test
+                                          'harness-clj.tools.glob-test
                                           'harness-clj.tools.read-test
                                           'harness-clj.tools.workspace-guard-test)]
     (when (pos? (+ fail error))

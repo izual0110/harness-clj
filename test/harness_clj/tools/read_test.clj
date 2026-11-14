@@ -2,7 +2,8 @@
   (:require [clojure.java.io :as io]
             [clojure.string :as str]
             [clojure.test :refer [deftest is testing]]
-            [harness-clj.tools :as tools])
+            [harness-clj.tools :as tools]
+            [harness-clj.workspace-guard :as guard])
   (:import [java.nio.charset StandardCharsets]
            [java.nio.file Files FileVisitOption OpenOption Path]
            [java.nio.file.attribute FileAttribute]))
@@ -23,8 +24,10 @@
                (.getBytes ^String content StandardCharsets/UTF_8)
                (make-array OpenOption 0)))
 
+(def ^:private test-tools (tools/create-tools (guard/create-guard ".")))
+
 (defn- read-file [path & [options]]
-  ((get-in tools/tools ["Read" :call]) (assoc options :file-path (str path))))
+  ((get-in test-tools [:tools "Read" :call]) (assoc options :file-path (str path))))
 
 (deftest read-file-content-test
   (with-temp-directory
@@ -35,8 +38,8 @@
         (is (= (read-file path) (read-file (.toAbsolutePath path))))
         (is (= "" (with-out-str (read-file path))))
         (is (= (read-file path)
-               (tools/execute-tool {:function {:name "Read"
-                                              :arguments {:file-path (str path)}}})))))))
+               ((:exec-fn test-tools) {:function {:name "Read"
+                                                 :arguments {:file-path (str path)}}})))))))
 
 (deftest read-file-pagination-test
   (with-temp-directory
@@ -80,8 +83,8 @@
         (is (= {:isError true :content (str "файл не найден: " missing)}
                (read-file missing)))
         (is (= (read-file missing)
-               (tools/execute-tool {:function {:name "Read"
-                                              :arguments {:file-path (str missing)}}})))
+               ((:exec-fn test-tools) {:function {:name "Read"
+                                                 :arguments {:file-path (str missing)}}})))
         (is (= {:isError true :content (str directory " — это папка, а не файл")}
                (read-file directory)))
         (is (= {:isError false :content "файл пустой"}
@@ -89,7 +92,7 @@
         (is (= {:isError true :content (str "файл не текстовый: " binary)}
                (read-file binary)))
         (is (= {:isError true :content "путь не указан"}
-               ((get-in tools/tools ["Read" :call]) {})))
+               ((get-in test-tools [:tools "Read" :call]) {})))
         (let [result (read-file "../outside.txt")]
           (is (true? (:isError result)))
           (is (str/starts-with? (:content result) "путь вне рабочей папки:")))
