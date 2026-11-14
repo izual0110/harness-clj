@@ -9,11 +9,15 @@
 (def ^:private ^Marker debug-marker (MarkerManager/getMarker "DEBUG"))
 (def ^:private ^Marker error-marker (MarkerManager/getMarker "ERROR"))
 (def ^:private ^Marker tool-marker (MarkerManager/getMarker "TOOL"))
+(def ^:private ^Integer max-content-lines 10)
 
 (defn- block [title content]
-  (str "┌─ " title "\n│ "
-       (str/replace (str content) #"\r\n|\r|\n" "\n│ ")
-       "\n└" (apply str (repeat (max 0 80) "─"))))
+  (let [lines (str/split (str content) #"\r\n|\r|\n" (inc max-content-lines))]
+    (str "┌─ " title "\n│ "
+         (str/join "\n│ " (take max-content-lines lines))
+         (when (> (count lines) max-content-lines) "\n│ ...")
+         "\n└" (apply str (repeat (max 0 80) "─")))))
+
 
 (defn- message-content [{:keys [content tool_calls]}]
   (str content
@@ -25,7 +29,7 @@
          (block (str "context · messages: " (count messages))
                 (str/join "\n"
                           (map (fn [{:keys [role tool_name] :as message}]
-                                 (str "[" role "]" (if (nil? tool_name) " " (str "[" tool_name "]\n"))  (message-content message)))
+                                 (str "[" role "]" (if (nil? tool_name) " " (str "[" tool_name "]\n")) (message-content message)))
                                messages))))
   messages)
 
@@ -34,9 +38,9 @@
     (.info logger response-marker
            (block (str "[" role "] response") (message-content message))))
   response)
-  
-  
-(defn turn-limit-reached [max-turns]  
+
+
+(defn turn-limit-reached [max-turns]
   (.info logger error-marker
          (block "Error" (str "Max turns [" max-turns "] limit reached!"))))
 
@@ -55,7 +59,7 @@
 
 (defn debug-ollama-request [^HttpRequest request request-body]
   (when (.isDebugEnabled logger debug-marker)
-    (.debug logger debug-marker 
+    (.debug logger debug-marker
             (block "debug · ollama request" (str (.method request) " " (.uri request) "\n"
                 (str/join "\n"
                           (for [[header values] (.map (.headers request)) value values] (str header ": " value))) "\n\n"
@@ -64,7 +68,7 @@
 
 (defn debug-ollama-response [^HttpResponse response]
   (when (.isDebugEnabled logger debug-marker)
-    (.debug logger debug-marker 
+    (.debug logger debug-marker
            (block "debug · ollama response" (str (str/join "\n"
                           (for [[header values] (.map (.headers response)) value values] (str header ": " value))) "\n\n"
                 (or (.body response) "")))))
