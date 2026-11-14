@@ -2,11 +2,12 @@
   (:require [harness-clj.agent-log :as agent-log]
             [harness-clj.chat-model :as chat-model]
             [harness-clj.tools :as tools]
-            [harness-clj.utils :refer [error]]))
+            [harness-clj.utils :refer [error]]
+            [harness-clj.workspace-guard :as workspace-guard]))
 
 (def system-prompt "You are Harness, a coding agent that works in a local repository. Use the available tools to inspect files when needed. Answer concisely.")
 
-(defn create-agent [{:keys [client system-prompts tools max-turns]
+(defn create-agent [{:keys [client system-prompts tools guard max-turns]
                      :or {max-turns 10}}]
   (when-not (and (integer? max-turns) (pos? max-turns))
     (throw (ex-info ":max-turns must be a positive integer"
@@ -15,16 +16,19 @@
    :system-prompts system-prompts
    :tools tools
    :max-turns max-turns
+   :guard guard
    :state (atom
            {:history []
             :tool-calls 0})})
 
 ;;replace to defonce
 (def ai-agent
-  (create-agent
-   {:client (chat-model/client)
-    :system-prompts [{:role "system" :content system-prompt}]
-    :tools (tools/specs)}))
+  (let [guard (workspace-guard/create-guard ".")]
+    (create-agent
+     {:client (chat-model/client)
+      :system-prompts [{:role "system" :content system-prompt}]
+      :guard guard
+      :tools (tools/create-tools guard)})))
 
 (defn- append-message [agent message]
   (swap! (:state agent) update :history conj message))
@@ -46,7 +50,8 @@
 (defn- execute-tool-call [agent tool-call]
   (let [tool-name (get-in tool-call [:function :name])
         tool-call-id (:id tool-call)
-        result (tools/execute-tool tool-call)]
+        execute-tool (get-in agent [:tools :exec])
+        result (execute-tool tool-call)]
     (agent-log/tool tool-call result)
     (add-tool-message agent tool-call-id tool-name (:content result))))
 
@@ -62,7 +67,7 @@
         (let [messages (into (:system-prompts agent) (:history @state))
               response (-> (chat-model/chat (:client agent)
                                             (agent-log/request messages)
-                                            (:tools agent))
+                                            (get-in agent [:tools :specs] ))
                            (agent-log/response))
               message (:message response)
               tool-calls (:tool_calls message)]
