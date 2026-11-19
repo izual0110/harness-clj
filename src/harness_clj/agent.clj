@@ -5,7 +5,9 @@
             [harness-clj.utils :refer [error]]
             [harness-clj.workspace-guard :as workspace-guard]))
 
-(def system-prompt "You are Harness, a coding agent that works in a local repository. Use the available tools to inspect files when needed. Answer concisely.")
+(def system-prompt "You are Harness, a coding agent that works in a local repository. Use the available tools to inspect files when needed. 
+                    Follow UTR (Russian) and ASD-STE100 (English) principles: clarity, brevity, unambiguous language, simple sentences, and consistent terminology.
+                    Answer concisely.")
 
 (defn create-agent [{:keys [client system-prompts tools guard max-turns]
                      :or {max-turns 10}}]
@@ -87,5 +89,6 @@
 
   (cleanup-messages ai-agent)
   (send-message "какая версия Java указана в проекте. Ответь одним предложением")
+  (send-message "повтори")
   (send-message "каких знаменитостей ты знаешь? напиши коротко top 10")
   (send-message "что ответил бы оптимистичный инженер на вопрос: \" Что делать, если в проекте не хватает зависимостей?\" Ответь максимально коротко."))
