@@ -61,21 +61,41 @@
     (with-redefs-fn {#'agent-log/block (fn [title content]
                                        (reset! logged {:title title :content content})
                                        "")}
-      #(is (identical? messages (agent-log/request messages))))
-    (is (= {:title "context · messages: 4"
+      #(is (identical? messages (agent-log/request messages 64))))
+    (is (= {:title "context · messages: 4 · tokens: 64"
             :content (str "[assistant] Tool calls: " (pr-str calls) "\n"
                           "[tool][Read]\n" (str/join "\n" (take limit first-lines)) "\n...\n"
                           "[tool][Read]\n" (str/join "\n" (take limit second-lines)) "\n...\n"
                           "[assistant] Done")}
            @logged))))
 
+(deftest request-logs-zero-context-tokens-test
+  (let [logged (atom nil)]
+    (with-redefs-fn {#'agent-log/block (fn [title _]
+                                       (reset! logged title)
+                                       "")}
+      #(agent-log/request [] 0))
+    (is (= "context · messages: 0 · tokens: 0" @logged))))
+
+(deftest response-logs-duration-test
+  (let [response {:message {:role "assistant" :content "Done"}
+                  :prompt_eval_count 12 :eval_count 3}
+        logged (atom nil)]
+    (with-redefs-fn {#'agent-log/block (fn [title content]
+                                       (reset! logged [title content])
+                                       "")}
+      #(is (identical? response (agent-log/response response 124104))))
+    (is (= ["[assistant] response · 124104 мс" "Done"] @logged))))
+
 (deftest tool-truncates-content-test
   (let [limit @#'agent-log/max-content-lines
         result {:isError false :content (str/join "\n" (range 1 (+ limit 3)))}
         logged (atom nil)]
-    (with-redefs-fn {#'agent-log/block (fn [_ content]
-                                       (reset! logged content)
+    (with-redefs-fn {#'agent-log/block (fn [title content]
+                                       (reset! logged [title content])
                                        "")}
-      #(agent-log/tool {:function {:name "Read" :arguments {}}} result))
-    (is (= (str (str/join "\n" (range 1 (inc limit))) "\n...") @logged))))
+      #(agent-log/tool {:function {:name "Read" :arguments {:file-path "pom.xml"}}} result 124104))
+    (is (= ["[tool][Read] {:file-path \"pom.xml\"} · 124104 мс"
+            (str (str/join "\n" (range 1 (inc limit))) "\n...")]
+           @logged))))
 (ns harness-clj.agent-log-test)

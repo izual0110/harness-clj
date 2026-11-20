@@ -15,7 +15,7 @@
   (let [ai-agent (agent/create-agent {:client ::client
                                      :system-prompts [{:role "system" :content "Be brief"}]
                                      :tools (test-tools {})})]
-    (is (= {:history [] :tool-calls 0} @(:state ai-agent)))))
+    (is (= {:history [] :tool-calls 0 :context-tokens nil} @(:state ai-agent)))))
 
 (deftest message-history-test
   (let [ai-agent (agent/create-agent {:client ::client
@@ -42,8 +42,10 @@
   (let [ai-agent (agent/create-agent {:client ::client :system-prompts [] :tools (test-tools {})})]
     (agent/add-message ai-agent "Hello")
     (agent/add-assistant-message ai-agent {:content "Hi!"})
+    (swap! (:state ai-agent) assoc :context-tokens 32)
     (agent/cleanup-messages ai-agent)
     (is (= [] (:history @(:state ai-agent))))
+    (is (nil? (:context-tokens @(:state ai-agent))))
     (agent/add-message ai-agent "Start again")
     (is (= [{:role "user" :content "Start again"}]
            (:history @(:state ai-agent))))))
@@ -71,7 +73,8 @@
       (is (= "Hi!" (agent/send-message "Hello")))
       (is (= {:history [{:role "user" :content "Hello"}
                         {:role "assistant" :content "Hi!"}]
-              :tool-calls 0}
+              :tool-calls 0
+              :context-tokens nil}
              @(:state ai-agent)))
       (is (= "Let's code." (agent/send-message "What next?"))))
     (is (= [{:client ::client
@@ -91,7 +94,8 @@
                       {:role "assistant" :content "Hi!"}
                       {:role "user" :content "What next?"}
                       {:role "assistant" :content "Let's code."}]
-            :tool-calls 0}
+            :tool-calls 0
+            :context-tokens nil}
            @(:state ai-agent)))))
 
 (deftest empty-tool-calls-test
@@ -104,7 +108,8 @@
           (is (= "Done" (agent/send-message "Hello"))))
         (is (= {:history [{:role "user" :content "Hello"}
                           {:role "assistant" :content "Done"}]
-                :tool-calls 0}
+                :tool-calls 0
+                :context-tokens nil}
                @(:state ai-agent)))))))
 
 (def ^:private read-definition
@@ -240,6 +245,61 @@
            (:messages (last @requests))))
     (is (= (:message (last responses))
            (last (:history @(:state ai-agent)))))))
+
+(deftest send-message-logs-timings-and-token-counts-test
+  (let [ai-agent (agent/create-agent
+                  {:client ::client :system-prompts [{:role "system" :content "Review"}]
+                   :tools {:specs []
+                           :exec-fn (constantly {:isError false :content "Contents"})}})
+        responses [{:prompt_eval_count 12 :eval_count 3
+                    :message {:role "assistant"
+                              :tool_calls [(read-call {:file-path "one.clj"})
+                                           (read-call {:file-path "two.clj"})]}}
+                   {:prompt_eval_count 21 :eval_count 2
+                    :message {:role "assistant" :content "Done"}}]
+        chat (recording-chat (atom []) responses)
+        events (atom [])]
+    (with-redefs [agent/ai-agent ai-agent
+                  agent-log/request (fn [messages tokens]
+                                      (swap! events conj [:context (count messages) tokens]))
+                  agent-log/response (fn [_ elapsed-ms] (swap! events conj [:response elapsed-ms]))
+                  agent-log/tool (fn [_ _ elapsed-ms] (swap! events conj [:tool elapsed-ms]))
+                  chat-model/chat (fn [& args]
+                                    (swap! events conj [:chat])
+                                    (apply chat args))]
+      (is (= "Done" (agent/send-message "Read both files"))))
+    (is (= [:context :chat :response :tool :tool :context :chat :response]
+           (mapv first @events)))
+    (is (= [[:context 2 6] [:context 5 15]]
+           (filterv #(= :context (first %)) @events)))
+    (is (= 23 (:context-tokens @(:state ai-agent))))
+    (is (every? (comp nat-int? second)
+                (filter #(#{:response :tool} (first %)) @events)))))
+
+(deftest send-message-retains-context-tokens-test
+  (let [ai-agent (agent/create-agent {:client ::client :system-prompts [] :tools (test-tools {})})
+        responses [{:prompt_eval_count 18 :eval_count 0
+                    :message {:role "assistant" :content "Hi"}}
+                   {:prompt_eval_count 25
+                    :message {:role "assistant" :content "Bye"}}]
+        counts (atom [])]
+    (with-redefs [agent/ai-agent ai-agent
+                  agent-log/request (fn [_ tokens] (swap! counts conj tokens))
+                  chat-model/chat (recording-chat (atom []) responses)]
+      (agent/send-message "Hello")
+      (agent/send-message "Goodbye"))
+    (is (= [2 18] @counts))
+    (is (= 18 (:context-tokens @(:state ai-agent))))))
+
+(deftest failed-request-logs-context-test
+  (let [ai-agent (agent/create-agent {:client ::client :system-prompts [] :tools (test-tools {})})
+        contexts (atom [])]
+    (with-redefs [agent/ai-agent ai-agent
+                  agent-log/request (fn [messages tokens] (swap! contexts conj [messages tokens]))
+                  chat-model/chat (fn [& _] (throw (ex-info "Ollama unavailable" {})))]
+      (is (thrown-with-msg? clojure.lang.ExceptionInfo #"Ollama unavailable"
+                            (agent/send-message "Hello"))))
+    (is (= [[[{:role "user" :content "Hello"}] 2]] @contexts))))
 
 (deftest turn-limit-test
   (doseq [limit [1 2]]

@@ -25,19 +25,20 @@
     (str (str/join "\n" (take max-content-lines lines))
          (when (> (count lines) max-content-lines) "\n..."))))
 
-(defn request [messages]
+(defn request [messages context-tokens]
   (.info logger request-marker
-         (block (str "context · messages: " (count messages))
+         (block (str "context · messages: " (count messages) " · tokens: " context-tokens)
                 (str/join "\n"
                           (map (fn [{:keys [role tool_name] :as message}]
                                  (str "[" role "]" (if (nil? tool_name) " " (str "[" tool_name "]\n")) (message-content message)))
                                messages))))
   messages)
 
-(defn response [response]
+(defn response [response elapsed-ms]
   (let [{:keys [role] :or {role "assistant"} :as message} (:message response)]
     (.info logger response-marker
-           (block (str "[" role "] response") (message-content message))))
+           (block (str "[" role "] response · " elapsed-ms " мс")
+                  (message-content message))))
   response)
 
 
@@ -45,9 +46,10 @@
   (.info logger error-marker
          (block "Error" (str "Max turns [" max-turns "] limit reached!"))))
 
-(defn tool [tool {:keys [isError] :as result}]
+(defn tool [tool {:keys [isError] :as result} elapsed-ms]
   (.info logger tool-marker
-         (block (str "[tool][" (get-in tool [:function :name]) "] " (get-in tool [:function :arguments]) (when isError " error"))
+         (block (str "[tool][" (get-in tool [:function :name]) "] " (get-in tool [:function :arguments])
+                     (when isError " error") " · " elapsed-ms " мс")
                 (message-content result))))
 
 

@@ -21,7 +21,8 @@
    :guard guard
    :state (atom
            {:history []
-            :tool-calls 0})})
+            :tool-calls 0
+            :context-tokens nil})})
 
 ;;replace to defonce
 (def ai-agent
@@ -49,37 +50,57 @@
                     (not (seq (:tool_calls message))) (dissoc :tool_calls))))
 
 (defn cleanup-messages [agent]
-  (swap! (:state agent) assoc :history []))
+  (swap! (:state agent) assoc :history [] :context-tokens nil))
+
+(defn- estimate-context-tokens [messages]
+  (let [characters (reduce + 0 (map (comp count str :content) messages))]
+    (quot (+ characters 3) 4)))
+
+(defn- response-context-tokens [{:keys [prompt_eval_count eval_count]}]
+  (when (and (nat-int? prompt_eval_count) (nat-int? eval_count))
+    (+ prompt_eval_count eval_count)))
+
+(defn- measure-ms [f]
+  (let [started (System/nanoTime)
+        result (f)]
+    [result (quot (- (System/nanoTime) started) 1000000)]))
 
 (defn- execute-tool-call [agent tool-call]
   (let [tool-name (get-in tool-call [:function :name])
         tool-call-id (:id tool-call)
         execute-tool (get-in agent [:tools :exec-fn])
-        result (execute-tool tool-call)]
-    (agent-log/tool tool-call result)
+        [result elapsed-ms] (measure-ms #(execute-tool tool-call))]
+    (agent-log/tool tool-call result elapsed-ms)
     (add-tool-message agent tool-call-id tool-name (:content result))))
+
+(defn- run-turn [agent]
+  (let [state (:state agent)
+        {:keys [history context-tokens]} @state
+        messages (into (:system-prompts agent) history)]
+    (agent-log/request messages (or context-tokens (estimate-context-tokens messages)))
+    (let [[response elapsed-ms] (measure-ms #(chat-model/chat (:client agent) messages
+                                                            (get-in agent [:tools :specs])))
+          message (:message response)]
+      (when-let [tokens (response-context-tokens response)]
+        (swap! state assoc :context-tokens tokens))
+      (agent-log/response response elapsed-ms)
+      (add-assistant-message agent message)
+      (doseq [tool-call (:tool_calls message)]
+        (execute-tool-call agent tool-call))
+      message)))
 
 (defn send-message [user-message]
   (let [agent ai-agent
-        state (:state agent)]
+        max-turns (:max-turns agent)]
     (add-message agent user-message)
-    (loop [remaining-turns (:max-turns agent)]
+    (loop [remaining-turns max-turns]
       (if (zero? remaining-turns)
         (do
-          (agent-log/turn-limit-reached (:max-turns agent))
-          (error "Достигнут предел в " (:max-turns agent) " итераций — задача не завершена."))
-        (let [messages (into (:system-prompts agent) (:history @state))
-              response (-> (chat-model/chat (:client agent)
-                                            (agent-log/request messages)
-                                            (get-in agent [:tools :specs] ))
-                           (agent-log/response))
-              message (:message response)]
-          (add-assistant-message agent message)
-          (if-let [tool-calls (seq (:tool_calls message))]
-            (do
-              (doseq [tool-call tool-calls]
-                (execute-tool-call agent tool-call))
-              (recur (dec remaining-turns)))
+          (agent-log/turn-limit-reached max-turns)
+          (error "Достигнут предел в " max-turns " итераций — задача не завершена."))
+        (let [message (run-turn agent)]
+          (if (seq (:tool_calls message))
+            (recur (dec remaining-turns))
             (:content message)))))))
 
 (comment
