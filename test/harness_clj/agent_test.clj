@@ -68,16 +68,12 @@
                     :done true}]]
     (with-redefs [agent/ai-agent ai-agent
                   chat-model/chat (recording-chat requests responses)]
+      (is (= "Hi!" (agent/send-message "Hello")))
       (is (= {:history [{:role "user" :content "Hello"}
                         {:role "assistant" :content "Hi!"}]
               :tool-calls 0}
-             (agent/send-message "Hello")))
-      (is (= {:history [{:role "user" :content "Hello"}
-                        {:role "assistant" :content "Hi!"}
-                        {:role "user" :content "What next?"}
-                        {:role "assistant" :content "Let's code."}]
-              :tool-calls 0}
-             (agent/send-message "What next?"))))
+             @(:state ai-agent)))
+      (is (= "Let's code." (agent/send-message "What next?"))))
     (is (= [{:client ::client
              :tools []
              :messages [{:role "system" :content "Be brief"}
@@ -91,11 +87,12 @@
                         {:role "assistant" :content "Hi!"}
                         {:role "user" :content "What next?"}]}]
            @requests))
-    (is (= [{:role "user" :content "Hello"}
-            {:role "assistant" :content "Hi!"}
-            {:role "user" :content "What next?"}
-            {:role "assistant" :content "Let's code."}]
-           (:history @(:state ai-agent))))))
+    (is (= {:history [{:role "user" :content "Hello"}
+                      {:role "assistant" :content "Hi!"}
+                      {:role "user" :content "What next?"}
+                      {:role "assistant" :content "Let's code."}]
+            :tool-calls 0}
+           @(:state ai-agent)))))
 
 (deftest empty-tool-calls-test
   (doseq [calls [nil []]]
@@ -104,13 +101,11 @@
             response {:message {:role "assistant" :content "Done" :tool_calls calls}}]
         (with-redefs [agent/ai-agent ai-agent
                       chat-model/chat (recording-chat (atom []) [response])]
-          (is (= {:history [{:role "user" :content "Hello"}
-                            {:role "assistant" :content "Done"}]
-                  :tool-calls 0}
-                 (agent/send-message "Hello"))))
-        (is (= [{:role "user" :content "Hello"}
-                {:role "assistant" :content "Done"}]
-               (:history @(:state ai-agent))))))))
+          (is (= "Done" (agent/send-message "Hello"))))
+        (is (= {:history [{:role "user" :content "Hello"}
+                          {:role "assistant" :content "Done"}]
+                :tool-calls 0}
+               @(:state ai-agent)))))))
 
 (def ^:private read-definition
   {:description "Read a file"
@@ -139,8 +134,8 @@
         user {:role "user" :content "Describe this project"}]
     (with-redefs [agent/ai-agent ai-agent
                   chat-model/chat (recording-chat requests [response final-response])]
-      (let [result (agent/send-message (:content user))]
-        (is (= @(:state ai-agent) result))))
+      (is (= (get-in final-response [:message :content])
+             (agent/send-message (:content user)))))
     (is (= [{:file-path "README.md"}] @executions))
     (let [tool-message {:role "tool" :tool_name "Read" :tool_call_id "call-read"
                         :content "1\t# Project"}
@@ -167,8 +162,8 @@
         requests (atom [])]
     (with-redefs [agent/ai-agent ai-agent
                   chat-model/chat (recording-chat requests [response final-response])]
-      (let [result (agent/send-message "Read three files")]
-        (is (= @(:state ai-agent) result))))
+      (is (= (get-in final-response [:message :content])
+             (agent/send-message "Read three files"))))
     (is (= 2 (count @requests)))
     (is (= ["one.clj" "two.clj" "three.clj"] @executions))
     (let [messages (filterv #(= "tool" (:role %)) (:history @(:state ai-agent)))]
@@ -189,8 +184,8 @@
         requests (atom [])]
     (with-redefs [agent/ai-agent ai-agent
                   chat-model/chat (recording-chat requests [response final-response])]
-      (let [result (agent/send-message "Read the missing file")]
-        (is (= @(:state ai-agent) result))))
+      (is (= (get-in final-response [:message :content])
+             (agent/send-message "Read the missing file"))))
     (let [tool-message {:role "tool" :tool_name "Read" :content (:content tool-error)}]
       (is (= tool-message
              (first (filterv #(= "tool" (:role %)) (:history @(:state ai-agent))))))
@@ -233,8 +228,8 @@
         requests (atom [])]
     (with-redefs [agent/ai-agent ai-agent
                   chat-model/chat (recording-chat requests responses)]
-      (let [result (agent/send-message "Read both files")]
-        (is (= @(:state ai-agent) result))))
+      (is (= (get-in (last responses) [:message :content])
+             (agent/send-message "Read both files"))))
     (is (= [first-call second-call] @executions))
     (is (= [1 3 5] (mapv #(count (:messages %)) @requests)))
     (is (= [{:role "user" :content "Read both files"}
@@ -286,9 +281,9 @@
       (with-redefs [agent/ai-agent ai-agent
                     agent-log/turn-limit-reached #(swap! limit-events conj %)
                     chat-model/chat (recording-chat requests responses)]
-        (let [result (agent/send-message "Read and answer")]
-          (is (= @(:state ai-agent) result))
-          (is (= (:message final-response) (last (:history result))))))
+        (is (= (get-in final-response [:message :content])
+               (agent/send-message "Read and answer"))))
+      (is (= (:message final-response) (last (:history @(:state ai-agent)))))
       (is (= limit (count @requests)))
       (is (= [] @limit-events)))))
 

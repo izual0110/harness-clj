@@ -79,10 +79,10 @@
                              vec))]
             (if (empty? found)
               (ok "ничего не найдено по шаблону " pattern)
-              (ok (apply str (map #(str (.relativize ^Path (:root workspace) %) "\n")
-                                  (take glob-max-results found)))
+              (ok (str/join "\n" (map #(str (.relativize ^Path (:root workspace) %))
+                                      (take glob-max-results found)))
                   (when (> (count found) glob-max-results)
-                    (str "… показаны первые " glob-max-results " совпадений, уточни шаблон")))))
+                    (str "\n… показаны первые " glob-max-results " совпадений, уточни шаблон")))))
           (catch IllegalArgumentException e
             (error "непонятный шаблон '" pattern "': " (.getMessage e)))
           (catch UncheckedIOException e

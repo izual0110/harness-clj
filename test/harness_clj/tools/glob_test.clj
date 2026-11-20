@@ -61,7 +61,7 @@
             tool-set (tools/create-tools workspace)
             relative (.relativize ^Path (:root workspace) file)
             arguments {:pattern "*.clj" :path (str directory)}
-            expected {:isError false :content (str relative "\n")}]
+            expected {:isError false :content (str relative)}]
         (is (= expected ((get-in tool-set [:tools "Glob" :call]) arguments)))
         (is (= expected ((:exec-fn tool-set) {:function {:name "Glob" :arguments arguments}})))
         (is (= "" (with-out-str ((get-in tool-set [:tools "Glob" :call]) arguments))))))))
@@ -75,7 +75,7 @@
         (create-file directory "src/deep/core.clj" 3)
         (create-file directory "notes.txt" 4)
         (create-directory directory "directory.clj")
-        (is (= {:isError false :content "src/deep/core.clj\nsrc/nested.clj\nroot.clj\n"}
+        (is (= {:isError false :content "src/deep/core.clj\nsrc/nested.clj\nroot.clj"}
                (#'tools/glob-files workspace {:pattern "**/*.clj"})))))))
 
 (deftest glob-jdk-patterns-test
@@ -91,11 +91,11 @@
                                      ["src/other.txt" 7]]]
           (create-file directory filename modified))
         (doseq [[pattern expected]
-                [["*.clj" "Tool1.clj\nroot.clj\n"]
-                 ["**/Tool?.{clj,java}" "src/deep/Tool9.clj\nsrc/ToolB.java\nsrc/ToolA.clj\nTool2.java\nTool1.clj\n"]
-                 ["src/Tool[AB].clj" "src/ToolA.clj\n"]
-                 ["src/*.java" "src/ToolB.java\n"]
-                 ["src/**/Tool?.clj" "src/deep/Tool9.clj\n"]]]
+                [["*.clj" "Tool1.clj\nroot.clj"]
+                 ["**/Tool?.{clj,java}" "src/deep/Tool9.clj\nsrc/ToolB.java\nsrc/ToolA.clj\nTool2.java\nTool1.clj"]
+                 ["src/Tool[AB].clj" "src/ToolA.clj"]
+                 ["src/*.java" "src/ToolB.java"]
+                 ["src/**/Tool?.clj" "src/deep/Tool9.clj"]]]
           (testing pattern
             (is (= {:isError false :content expected}
                    (#'tools/glob-files workspace {:pattern pattern})))))))))
@@ -107,7 +107,7 @@
         (create-file directory "m-oldest.clj" 1)
         (create-file directory "z-newest.clj" 3)
         (create-file directory "a-middle.clj" 2)
-        (is (= {:isError false :content "z-newest.clj\na-middle.clj\nm-oldest.clj\n"}
+        (is (= {:isError false :content "z-newest.clj\na-middle.clj\nm-oldest.clj"}
                (#'tools/glob-files workspace {:pattern "*.clj"})))))))
 
 (deftest glob-default-path-test
@@ -117,7 +117,7 @@
         (create-file directory "root.clj" 1)
         (doseq [options [{} {:path nil} {:path "."} {:path (str directory)}]]
           (testing (pr-str options)
-            (is (= {:isError false :content "root.clj\n"}
+            (is (= {:isError false :content "root.clj"}
                    (#'tools/glob-files workspace (assoc options :pattern "*.clj"))))))))))
 
 (deftest glob-subdirectory-path-test
@@ -129,9 +129,9 @@
         (create-file directory "src/deep/nested.clj" 2)
         (doseq [path ["src" "./src/./" (str (.resolve ^Path directory "src"))]]
           (testing path
-            (is (= {:isError false :content "src/deep/nested.clj\nsrc/direct.clj\n"}
+            (is (= {:isError false :content "src/deep/nested.clj\nsrc/direct.clj"}
                    (#'tools/glob-files workspace {:pattern "**/*.clj" :path path})))
-            (is (= {:isError false :content "src/direct.clj\n"}
+            (is (= {:isError false :content "src/direct.clj"}
                    (#'tools/glob-files workspace {:pattern "*.clj" :path path})))))))))
 
 (deftest glob-missing-pattern-test
@@ -231,7 +231,7 @@
                                ["nested/loop" root]]]
           (Files/createSymbolicLink (.resolve root ^String link) target
                                    (make-array FileAttribute 0)))
-        (is (= {:isError false :content "data/inside.clj\n"}
+        (is (= {:isError false :content "data/inside.clj"}
                (#'tools/glob-files workspace {:pattern "**/*.clj"})))))))
 
 (deftest glob-ignored-directory-segments-test
@@ -246,7 +246,7 @@
                 prefix ["" "src/deep/"]]
           (create-file directory (str prefix segment "/hidden.clj") 100))
         (spit (.toFile (.resolve ^Path directory ".gitignore")) "ignored-by-git/\n")
-        (is (= {:isError false :content (apply str (map #(str % "\n") (reverse included)))}
+        (is (= {:isError false :content (str/join "\n" (reverse included))}
                (#'tools/glob-files workspace {:pattern "**/*.clj"})))))))
 
 (deftest glob-walk-io-errors-test
@@ -279,7 +279,7 @@
         (is (= 100 @#'tools/glob-max-results))
         (doseq [[modified filename] (map-indexed vector filenames)]
           (create-file directory filename modified))
-        (is (= {:isError false :content (apply str (map #(str % "\n") (reverse filenames)))}
+        (is (= {:isError false :content (str/join "\n" (reverse filenames))}
                (#'tools/glob-files workspace {:pattern "*.clj"})))))))
 
 (deftest glob-exceeded-result-limit-test
