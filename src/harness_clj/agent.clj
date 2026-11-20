@@ -5,7 +5,7 @@
             [harness-clj.utils :refer [error]]
             [harness-clj.workspace-guard :as workspace-guard]))
 
-(def system-prompt "You are Harness, a coding agent that works in a local repository. Use the available tools to inspect files when needed. 
+(def system-prompt "You are Harness, a coding agent that works in a local repository. Use the available tools to inspect files when needed.
                     Follow UTR (Russian) and ASD-STE100 (English) principles: clarity, brevity, unambiguous language, simple sentences, and consistent terminology.
                     Answer concisely.")
 
@@ -44,7 +44,9 @@
     (append-message agent {:role "tool" :tool_call_id tool-call-id :tool_name tool-name :content message})))
 
 (defn add-assistant-message [agent message]
-  (append-message agent {:role "assistant" :content message}))
+  (append-message agent
+                  (cond-> (assoc message :role "assistant")
+                    (not (seq (:tool_calls message))) (dissoc :tool_calls))))
 
 (defn cleanup-messages [agent]
   (swap! (:state agent) assoc :history []))
@@ -71,14 +73,14 @@
                                             (agent-log/request messages)
                                             (get-in agent [:tools :specs] ))
                            (agent-log/response))
-              message (:message response)
-              tool-calls (:tool_calls message)]
-          (if (seq tool-calls)
+              message (:message response)]
+          (add-assistant-message agent message)
+          (if-let [tool-calls (seq (:tool_calls message))]
             (do
               (doseq [tool-call tool-calls]
                 (execute-tool-call agent tool-call))
               (recur (dec remaining-turns)))
-            (add-assistant-message agent (:content message))))))))
+            (:content message)))))))
 
 (comment
 

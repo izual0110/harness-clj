@@ -1,5 +1,6 @@
 (ns harness-clj.agent-test
-  (:require [clojure.test :refer [deftest is testing]]
+  (:require [clojure.string :as str]
+            [clojure.test :refer [deftest is testing]]
             [harness-clj.agent :as agent]
             [harness-clj.agent-log :as agent-log]
             [harness-clj.chat-model :as chat-model]
@@ -21,7 +22,7 @@
                                      :system-prompts []
                                      :tools (test-tools {})})]
     (agent/add-message ai-agent "Hello")
-    (agent/add-assistant-message ai-agent "Hi!")
+    (agent/add-assistant-message ai-agent {:content "Hi!"})
     (agent/add-message ai-agent "What next?")
     (is (= [{:role "user" :content "Hello"}
             {:role "assistant" :content "Hi!"}
@@ -40,7 +41,7 @@
 (deftest cleanup-messages-test
   (let [ai-agent (agent/create-agent {:client ::client :system-prompts [] :tools (test-tools {})})]
     (agent/add-message ai-agent "Hello")
-    (agent/add-assistant-message ai-agent "Hi!")
+    (agent/add-assistant-message ai-agent {:content "Hi!"})
     (agent/cleanup-messages ai-agent)
     (is (= [] (:history @(:state ai-agent))))
     (agent/add-message ai-agent "Start again")
@@ -146,9 +147,9 @@
           initial-messages [{:role "system" :content "Be brief"} user]]
       (is (= [{:client ::client :tools tool-specs :messages initial-messages}
               {:client ::client :tools tool-specs
-               :messages (conj initial-messages tool-message)}]
+               :messages (conj initial-messages (:message response) tool-message)}]
              @requests))
-      (is (= [user tool-message (:message final-response)]
+      (is (= [user (:message response) tool-message (:message final-response)]
              (:history @(:state ai-agent)))))))
 
 (deftest multiple-tool-calls-test
@@ -174,7 +175,7 @@
       (is (= ["Read" "Read" "Read"] (mapv :tool_name messages)))
       (is (= ["one.clj: Привет" "two.clj: Привет" "three.clj: Привет"]
              (mapv :content messages)))
-      (is (= (into [{:role "user" :content "Read three files"}] messages)
+      (is (= (into [{:role "user" :content "Read three files"} (:message response)] messages)
              (:messages (second @requests)))))))
 
 (deftest tool-error-message-test
@@ -193,8 +194,28 @@
     (let [tool-message {:role "tool" :tool_name "Read" :content (:content tool-error)}]
       (is (= tool-message
              (first (filterv #(= "tool" (:role %)) (:history @(:state ai-agent))))))
-      (is (= tool-message (last (:messages (second @requests)))))
+      (is (= [{:role "user" :content "Read the missing file"} (:message response) tool-message]
+             (:messages (second @requests))))
       (is (= (:message final-response) (last (:history @(:state ai-agent))))))))
+
+(deftest invalid-tool-call-recovery-test
+  (doseq [[tool-name arguments error-detail] [["MissingTool" {} "MissingTool"]
+                                              ["Glob" {:pattern 10} "pattern"]]]
+    (testing (str tool-name " " (pr-str arguments))
+      (let [ai-agent (agent/create-agent {:client ::client :system-prompts []
+                                         :tools (:tools agent/ai-agent)})
+            call {:id "failed-call" :function {:name tool-name :arguments arguments}}
+            responses [{:message {:role "assistant" :content "" :tool_calls [call]}}
+                       {:message {:role "assistant" :content "Done"}}]
+            requests (atom [])]
+        (with-redefs [agent/ai-agent ai-agent
+                      chat-model/chat (recording-chat requests responses)]
+          (agent/send-message "Use a tool"))
+        (let [{:keys [content] :as message} (last (get-in @requests [1 :messages]))]
+          (is (= {:role "tool" :tool_name tool-name :tool_call_id (:id call)}
+                 (select-keys message [:role :tool_name :tool_call_id])))
+          (is (and (string? content) (str/includes? content error-detail))
+              (str "Expected a tool error mentioning " error-detail ", got " (pr-str content))))))))
 
 (deftest successive-tool-rounds-test
   (let [executions (atom [])
@@ -215,9 +236,11 @@
       (let [result (agent/send-message "Read both files")]
         (is (= @(:state ai-agent) result))))
     (is (= [first-call second-call] @executions))
-    (is (= [1 2 3] (mapv #(count (:messages %)) @requests)))
+    (is (= [1 3 5] (mapv #(count (:messages %)) @requests)))
     (is (= [{:role "user" :content "Read both files"}
+            (:message (first responses))
             {:role "tool" :tool_name "Read" :content "one.clj"}
+            (:message (second responses))
             {:role "tool" :tool_name "Read" :content "two.clj"}]
            (:messages (last @requests))))
     (is (= (:message (last responses))
@@ -246,7 +269,7 @@
       (is (= (* 2 limit) @executions))
       (is (= limit (count @requests)))
       (is (= [limit] @limit-events))
-      (is (= (inc (* 2 limit)) (count (:history @(:state ai-agent))))))))
+      (is (= (inc (* 3 limit)) (count (:history @(:state ai-agent))))))))
 
 (deftest final-answer-on-last-turn-test
   (doseq [limit [1 2]]

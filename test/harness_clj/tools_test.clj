@@ -30,7 +30,7 @@
     (is (every? (comp fn? :call) (vals tools)))
     (is (= (#'tools/specs tools) specs))
     (is (fn? exec-fn))
-    (is (= "нет инструмента 'unknown'. Доступны: [\"Read\" \"Glob\"]"
+    (is (= {:isError true :content "нет инструмента 'unknown'. Доступны: [\"Read\" \"Glob\"]"}
            (exec-fn {:function {:name "unknown" :arguments {}}})))))
 
 (deftest create-tools-guard-isolation-test
@@ -101,9 +101,9 @@
   (let [registry {"Read" (assoc read-definition :call
                                (fn [_] (throw (ex-info "Must not execute" {}))))}
         call {:function {:name "unknown" :arguments {}}}]
-    (is (= "нет инструмента 'unknown'. Доступны: [\"Read\"]"
+    (is (= {:isError true :content "нет инструмента 'unknown'. Доступны: [\"Read\"]"}
            (#'tools/execute-tool registry call)))
-    (is (= "нет инструмента 'unknown'. Доступны: []"
+    (is (= {:isError true :content "нет инструмента 'unknown'. Доступны: []"}
            (#'tools/execute-tool {} call)))))
 
 (deftest execution-error-test

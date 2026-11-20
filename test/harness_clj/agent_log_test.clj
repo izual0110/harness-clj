@@ -34,8 +34,8 @@
                               [{:content "Done" :tool_calls []} "Done"]]]
     (is (= expected (#'agent-log/message-content message))))
   (let [calls [{:function {:name "Read" :arguments {:file-path "README.md"}}}]]
-    (doseq [content [nil "" "Reading"]]
-      (is (= (str content (when (seq content) "\n") "Tool calls: " (pr-str calls))
+    (doseq [[content prefix] [[nil ""] ["" ""] ["Reading" "Reading\n"] [42 "42\n"]]]
+      (is (= (str prefix "Tool calls: " (pr-str calls))
              (#'agent-log/message-content {:content content :tool_calls calls}))))))
 
 (deftest message-content-line-limit-test
@@ -52,7 +52,9 @@
   (let [limit @#'agent-log/max-content-lines
         first-lines (map #(str "first-" %) (range 1 (+ limit 3)))
         second-lines (map #(str "second-" %) (range 1 (+ limit 3)))
-        messages [{:role "tool" :tool_name "Read" :content (str/join "\n" first-lines)}
+        calls [{:function {:name "Read" :arguments {:file-path "README.md"}}}]
+        messages [{:role "assistant" :tool_calls calls}
+                  {:role "tool" :tool_name "Read" :content (str/join "\n" first-lines)}
                   {:role "tool" :tool_name "Read" :content (str/join "\n" second-lines)}
                   {:role "assistant" :content "Done"}]
         logged (atom nil)]
@@ -60,8 +62,9 @@
                                        (reset! logged {:title title :content content})
                                        "")}
       #(is (identical? messages (agent-log/request messages))))
-    (is (= {:title "context · messages: 3"
-            :content (str "[tool][Read]\n" (str/join "\n" (take limit first-lines)) "\n...\n"
+    (is (= {:title "context · messages: 4"
+            :content (str "[assistant] Tool calls: " (pr-str calls) "\n"
+                          "[tool][Read]\n" (str/join "\n" (take limit first-lines)) "\n...\n"
                           "[tool][Read]\n" (str/join "\n" (take limit second-lines)) "\n...\n"
                           "[assistant] Done")}
            @logged))))

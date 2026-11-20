@@ -56,9 +56,11 @@
   (.toMillis (Files/getLastModifiedTime path (make-array LinkOption 0))))
 
 (defn- glob-files [workspace {:keys [pattern path]}]
-  (if (str/blank? pattern)
-    (error "не указан шаблон поиска")
-    (let [root (if (nil? path)
+  (cond
+    (nil? pattern)          (error "не указан шаблон поиска")
+    (not (string? pattern)) (error "аргумент pattern должен быть строкой")
+    (str/blank? pattern)    (error "не указан шаблон поиска")
+    :else   (let [root (if (nil? path)
                  (:root workspace)
                  (workspace-guard/resolve workspace path))]
       (cond
@@ -95,16 +97,16 @@
         tools))
 
 (defn- execute-tool
-  [tools call] 
+  [tools call]
   (let [{:keys [name arguments]} (:function call)]
     (if-let [f (get-in tools [name :call])]
       (f arguments)
-      (str "нет инструмента '" name "'. Доступны: " (mapv first tools)))))
+      (error "нет инструмента '" name "'. Доступны: " (mapv first tools)))))
 
 (defn create-tools [guard]
   (let [tools {"Read"
                {:description "Reads a file from the local filesystem. Use this instead of guessing file contents.
-                        
+
                                           Usage:
                                           - file-path is relative to the project root
                                           - Output is in `cat -n` format: line number, tab, then the line content
@@ -116,9 +118,7 @@
                               :offset {:type "integer" :description "1-based line number to start from"}
                               :limit {:type "integer" :description "How many lines to read, default 2000"}}
                  :required ["file-path"]}
-              
                 :call (partial read-file guard)}
-              
                "Glob"
                {:description (str "Finds files by name pattern. Use this when you know what a file is called but not where it is.
                                           Usage:
@@ -131,14 +131,9 @@
                  :properties {:pattern {:type "string" :description "Glob pattern, for example **/*.java or **/Tool*.java"}
                               :path {:type "string" :description "Directory to search in, defaults to project root"}}
                  :required ["pattern"]}
-              
                 :call (partial glob-files guard)}
-               
                }]
                 {:guard guard
                  :tools tools
                  :specs (specs tools)
                  :exec-fn (partial execute-tool tools)}))
-
-
-

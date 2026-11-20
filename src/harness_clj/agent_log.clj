@@ -17,9 +17,10 @@
        "\n└" (apply str (repeat (max 0 80) "─"))))
 
 (defn- message-content [{:keys [content tool_calls]}]
-  (let [text (str content
-                  (when (seq tool_calls)
-                    (str (when (seq content) "\n") "Tool calls: " (pr-str tool_calls))))
+  (let [content (str content)
+        text (if (seq tool_calls)
+               (str content (when (seq content) "\n") "Tool calls: " (pr-str tool_calls))
+               content)
         lines (str/split text #"\r\n|\r|\n" (inc max-content-lines))]
     (str (str/join "\n" (take max-content-lines lines))
          (when (> (count lines) max-content-lines) "\n..."))))
