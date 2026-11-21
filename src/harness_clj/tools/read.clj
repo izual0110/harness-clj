@@ -2,7 +2,7 @@
   (:require [clojure.string :as str]
             [harness-clj.tools.file-utils :refer [directory? file-exists]]
             [harness-clj.utils :refer [error ok]]
-            [harness-clj.workspace-guard :as workspace-guard])
+            [harness-clj.tools.workspace-guard :as workspace-guard])
   (:import [java.io IOException]
            [java.nio.charset MalformedInputException]
            [java.nio.file Files]))

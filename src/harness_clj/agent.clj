@@ -1,9 +1,11 @@
 (ns harness-clj.agent
-  (:require [harness-clj.agent-log :as agent-log]
+  (:require [clojure.edn :as edn]
+            [clojure.java.io :as io]
+            [harness-clj.agent-log :as agent-log]
             [harness-clj.chat-model :as chat-model]
             [harness-clj.tools.tools :as tools]
-            [harness-clj.utils :refer [error]]
-            [harness-clj.workspace-guard :as workspace-guard]))
+            [harness-clj.tools.workspace-guard :as workspace-guard]
+            [harness-clj.utils :refer [error]]))
 
 (def system-prompt "You are Harness, a coding agent that works in a local repository. Use the available tools to inspect files when needed.
                     Follow UTR (Russian) and ASD-STE100 (English) principles: clarity, brevity, unambiguous language, simple sentences, and consistent terminology.
@@ -24,11 +26,21 @@
             :tool-calls 0
             :context-tokens nil})})
 
+(defn load-config
+  "Reads Ollama configuration from a classpath EDN resource."
+  ([] (load-config "harness.edn"))
+  ([resource-name]
+   (if-let [resource (io/resource resource-name)]
+     (edn/read-string (slurp resource))
+     (throw (ex-info "Ollama configuration resource not found"
+                     {:resource resource-name})))))
+
 ;;replace to defonce
 (def ai-agent
-  (let [guard (workspace-guard/create-guard ".")]
+  (let [config (load-config)
+        guard (workspace-guard/create-guard (:base-dir config))]
     (create-agent
-     {:client (chat-model/client)
+     {:client (chat-model/create-client config)
       :system-prompts [{:role "system" :content system-prompt}]
       :guard guard
       :tools (tools/create-tools guard)})))
@@ -109,6 +121,10 @@
         state (:state agent)
         messages (into (:system-prompts agent) (:history @state))]
     messages)
+  
+  (->> ai-agent
+       (:client)
+       (chat-model/list-models))
 
   (cleanup-messages ai-agent)
   (send-message "какая версия Java указана в проекте. Ответь одним предложением")

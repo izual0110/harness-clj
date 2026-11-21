@@ -1,4 +1,4 @@
-(ns harness-clj.workspace-guard
+(ns harness-clj.tools.workspace-guard
   (:refer-clojure :exclude [resolve])
   (:require [clojure.java.io :as io]
             [clojure.string :as str]

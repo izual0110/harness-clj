@@ -4,7 +4,7 @@
     [harness-clj.tools.file-utils :refer [directory? files-walk ignored?
                                           is-regular-file modified-at]]
     [harness-clj.utils :refer [error ok]]
-    [harness-clj.workspace-guard :as workspace-guard]) 
+    [harness-clj.tools.workspace-guard :as workspace-guard]) 
   (:import
     [java.io IOException UncheckedIOException]
     [java.nio.file FileSystems Path PathMatcher]))

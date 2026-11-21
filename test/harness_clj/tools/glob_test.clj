@@ -4,7 +4,7 @@
             [clojure.test :refer [deftest is testing]]
             [harness-clj.tools.glob :as glob]
             [harness-clj.tools.tools :as tools]
-            [harness-clj.workspace-guard :as workspace-guard])
+            [harness-clj.tools.workspace-guard :as workspace-guard])
   (:import [java.io IOException UncheckedIOException]
            [java.nio.file Files FileSystem FileVisitOption Path]
            [java.nio.file.attribute BasicFileAttributes FileAttribute FileTime]

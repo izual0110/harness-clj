@@ -1,0 +1,8 @@
+{:base-dir "."
+ :ollama {:host "http://localhost:11431"
+          :timeout-ms 480000
+          :model "qwen3.5:4b"
+          :stream false
+          :think false
+          :keep_alive "5m"
+          :options {:temperature 0.2}}}

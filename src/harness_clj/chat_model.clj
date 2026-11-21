@@ -8,33 +8,25 @@
            [java.net.http HttpClient HttpRequest HttpRequest$BodyPublishers
             HttpResponse$BodyHandlers]
            [java.nio.charset StandardCharsets]
-                      [java.time Duration]))
+           [java.time Duration]))
 
-(defn load-config
-  "Reads Ollama configuration from a classpath EDN resource."
-  ([] (load-config "chat-model.edn"))
-  ([resource-name]
-   (if-let [resource (io/resource resource-name)]
-     (edn/read-string (slurp resource))
-     (throw (ex-info "Ollama configuration resource not found"
-                     {:resource resource-name})))))
-
-(defn client
+(defn create-client
   "Creates a reusable client. Call close when no longer needed."
-  ([] (client (load-config)))
-  ([config]
-   (assoc config :http-client
-          (-> (HttpClient/newBuilder)
-              (.connectTimeout (Duration/ofMillis (:timeout-ms config)))
-              (.build)))))
+  [config]
+  {:config config
+   :internal-http-client (-> (HttpClient/newBuilder)
+               (.connectTimeout (Duration/ofMillis (get-in config [:ollama :timeout-ms])))
+               (.build))})
 
 (defn close
   "Closes the underlying HTTP client, waiting for ongoing requests to finish."
-  [{:keys [http-client]}]
-  (.close ^HttpClient http-client))
+  [{:keys [internal-http-client]}]
+  (.close ^HttpClient internal-http-client))
 
-(defn- request! [{:keys [host timeout-ms http-client]} method path body]
-  (let [url (str (str/replace host #"/+$" "") path)
+(defn- request! [{:keys [config internal-http-client]} method path body]
+  (let [host (get-in config [:ollama :host])
+        timeout-ms (get-in config [:ollama :timeout-ms])
+        url (str (str/replace host #"/+$" "") path)
         request-body (when body (json/write-str body :escape-unicode false))
         builder (-> (HttpRequest/newBuilder (URI/create url))
                     (.timeout (Duration/ofMillis timeout-ms))
@@ -44,7 +36,7 @@
                           (-> builder
                               (.header "Content-Type" "application/json")
                               (.POST (HttpRequest$BodyPublishers/ofString request-body)))))
-        response (.send ^HttpClient http-client (agent-log/debug-ollama-request request request-body)
+        response (.send ^HttpClient internal-http-client (agent-log/debug-ollama-request request request-body)
                         (HttpResponse$BodyHandlers/ofString StandardCharsets/UTF_8))
         status (.statusCode (agent-log/debug-ollama-response response))
         raw-body (.body response)]
@@ -57,26 +49,13 @@
                         {:status status :url url :body result})))
       result)))
 
-(defn- generation-params [{:keys [defaults]} params]
-  (let [params (-> (merge defaults params)
-                   (assoc :options (merge (:options defaults) (:options params))))]
-    (when (:stream params)
-      (throw (ex-info "Streaming is not supported; use :stream false" {})))
-    (assoc params :stream false)))
 
-(defn generate
-  "POST /api/generate. Returns the full response map with keyword keys."
-  ([client prompt] (generate client prompt {}))
-  ([client prompt params]
-   (request! client :post "/api/generate"
-             (assoc (generation-params client params) :prompt prompt))))
 
 (defn chat
   "POST /api/chat. Messages use string roles, e.g. {:role \"user\" :content \"Hi\"}."
-  ([client messages tools] (chat client messages tools {}))
-  ([client messages tools params]
+  ([client messages tools]
    (request! client :post "/api/chat"
-             (assoc (generation-params client params) :tools tools :messages messages))))
+             (assoc (get-in client [:config :ollama]) :tools tools :messages messages))))
 
 (defn list-models
   "GET /api/tags. Returns the full response map, including :models."

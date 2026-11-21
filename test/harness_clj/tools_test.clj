@@ -3,7 +3,7 @@
             [clojure.string :as str]
             [clojure.test :refer [deftest is testing]]
             [harness-clj.tools.tools :as tools]
-            [harness-clj.workspace-guard :as guard])
+            [harness-clj.tools.workspace-guard :as guard])
   (:import [java.nio.file Files FileVisitOption Path]
            [java.nio.file.attribute FileAttribute]))
 
