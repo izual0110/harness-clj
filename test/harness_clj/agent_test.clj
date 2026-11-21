@@ -38,9 +38,9 @@
   (let [ai-agent (agent/create-agent {:client ::client
                                      :system-prompts []
                                      :tools (test-tools {})})]
-    (agent/add-message ai-agent "Hello")
-    (agent/add-assistant-message ai-agent {:content "Hi!"})
-    (agent/add-message ai-agent "What next?")
+    (agent/add-user-message ai-agent "Hello")
+    (agent/append-message ai-agent {:role "assistant" :content "Hi!"})
+    (agent/add-user-message ai-agent "What next?")
     (is (= [{:role "user" :content "Hello"}
             {:role "assistant" :content "Hi!"}
             {:role "user" :content "What next?"}]
@@ -57,13 +57,13 @@
 
 (deftest cleanup-messages-test
   (let [ai-agent (agent/create-agent {:client ::client :system-prompts [] :tools (test-tools {})})]
-    (agent/add-message ai-agent "Hello")
-    (agent/add-assistant-message ai-agent {:content "Hi!"})
+    (agent/add-user-message ai-agent "Hello")
+    (agent/append-message ai-agent {:role "assistant" :content "Hi!"})
     (swap! (:state ai-agent) assoc :context-tokens 32)
     (agent/cleanup-messages ai-agent)
     (is (= [] (:history @(:state ai-agent))))
     (is (nil? (:context-tokens @(:state ai-agent))))
-    (agent/add-message ai-agent "Start again")
+    (agent/add-user-message ai-agent "Start again")
     (is (= [{:role "user" :content "Start again"}]
            (:history @(:state ai-agent))))))
 
@@ -124,7 +124,7 @@
                       chat-model/chat (recording-chat (atom []) [response])]
           (is (= "Done" (agent/send-message "Hello"))))
         (is (= {:history [{:role "user" :content "Hello"}
-                          {:role "assistant" :content "Done"}]
+                          {:role "assistant" :content "Done" :tool_calls calls}]
                 :tool-calls 0
                 :context-tokens nil}
                @(:state ai-agent)))))))

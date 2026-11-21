@@ -45,21 +45,16 @@
       :guard guard
       :tools (tools/create-tools guard)})))
 
-(defn- append-message [agent message]
+(defn append-message [agent message]
   (swap! (:state agent) update :history conj message))
 
-(defn add-message [agent message]
+(defn add-user-message [agent message]
   (append-message agent {:role "user" :content message}))
 
 (defn add-tool-message [agent tool-call-id tool-name message]
-  (if (nil? tool-call-id)
-    (append-message agent {:role "tool" :tool_name tool-name :content message})
-    (append-message agent {:role "tool" :tool_call_id tool-call-id :tool_name tool-name :content message})))
-
-(defn add-assistant-message [agent message]
-  (append-message agent
-                  (cond-> (assoc message :role "assistant")
-                    (not (seq (:tool_calls message))) (dissoc :tool_calls))))
+  (append-message agent 
+                  (cond-> {:role "tool" :tool_name tool-name :content message}
+                    (some? tool-call-id) (assoc :tool_call_id tool-call-id))))
 
 (defn cleanup-messages [agent]
   (swap! (:state agent) assoc :history [] :context-tokens nil))
@@ -96,7 +91,7 @@
       (when-let [tokens (response-context-tokens response)]
         (swap! state assoc :context-tokens tokens))
       (agent-log/response response elapsed-ms)
-      (add-assistant-message agent message)
+      (append-message agent message)
       (doseq [tool-call (:tool_calls message)]
         (execute-tool-call agent tool-call))
       message)))
@@ -104,7 +99,7 @@
 (defn send-message [user-message]
   (let [agent ai-agent
         max-turns (:max-turns agent)]
-    (add-message agent user-message)
+    (add-user-message agent user-message)
     (loop [remaining-turns max-turns]
       (if (zero? remaining-turns)
         (do
