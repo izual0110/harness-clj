@@ -44,7 +44,7 @@ jobs:
           cache-from: type=gha,scope=harness-clj-ci
           cache-to: type=gha,scope=harness-clj-ci,mode=max
 
-      - name: Test, compile and run in Docker
+      - name: Lint, test, compile and run in Docker
         run: |
           mkdir -p "${HOME}/.m2/repository"
           docker run --rm \
@@ -55,6 +55,7 @@ jobs:
             bash -euc '
               java --version
               clojure -Sdescribe
+              clojure -M:lint
               clojure -M:test
               clojure -M:build
               clojure -M:run

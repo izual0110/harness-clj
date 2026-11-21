@@ -8,6 +8,7 @@ Requires JDK 27 and [Clojure CLI](https://clojure.org/guides/install_clojure), o
 
 ```sh
 clojure -M:run Ada     # Run
+clojure -M:lint        # Lint src, test and dev with clj-kondo
 clojure -M:test        # Test (no Ollama required)
 clojure -M:build       # AOT-compile to target/classes
 clojure -M:nrepl       # Start nREPL with CIDER middleware
