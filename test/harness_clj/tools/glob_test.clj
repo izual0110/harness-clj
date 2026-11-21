@@ -2,7 +2,8 @@
   (:require [clojure.java.io :as io]
             [clojure.string :as str]
             [clojure.test :refer [deftest is testing]]
-            [harness-clj.tools :as tools]
+            [harness-clj.tools.glob :as glob]
+            [harness-clj.tools.tools :as tools]
             [harness-clj.workspace-guard :as workspace-guard])
   (:import [java.io IOException UncheckedIOException]
            [java.nio.file Files FileSystem FileVisitOption Path]
@@ -37,6 +38,9 @@
   (is (true? (:isError result)))
   (is (and (string? (:content result))
            (str/starts-with? (:content result) prefix))))
+
+(defn- glob-files [workspace arguments]
+  ((:call (glob/create-glob-tool workspace)) arguments))
 
 (deftest glob-registration-test
   (let [tool-set (tools/create-tools (workspace-guard/create-guard "."))
@@ -76,7 +80,7 @@
         (create-file directory "notes.txt" 4)
         (create-directory directory "directory.clj")
         (is (= {:isError false :content "src/deep/core.clj\nsrc/nested.clj\nroot.clj"}
-               (#'tools/glob-files workspace {:pattern "**/*.clj"})))))))
+               (glob-files workspace {:pattern "**/*.clj"})))))))
 
 (deftest glob-jdk-patterns-test
   (with-temp-directory
@@ -98,7 +102,7 @@
                  ["src/**/Tool?.clj" "src/deep/Tool9.clj"]]]
           (testing pattern
             (is (= {:isError false :content expected}
-                   (#'tools/glob-files workspace {:pattern pattern})))))))))
+                   (glob-files workspace {:pattern pattern})))))))))
 
 (deftest glob-newest-first-test
   (with-temp-directory
@@ -108,7 +112,7 @@
         (create-file directory "z-newest.clj" 3)
         (create-file directory "a-middle.clj" 2)
         (is (= {:isError false :content "z-newest.clj\na-middle.clj\nm-oldest.clj"}
-               (#'tools/glob-files workspace {:pattern "*.clj"})))))))
+               (glob-files workspace {:pattern "*.clj"})))))))
 
 (deftest glob-default-path-test
   (with-temp-directory
@@ -118,7 +122,7 @@
         (doseq [options [{} {:path nil} {:path "."} {:path (str directory)}]]
           (testing (pr-str options)
             (is (= {:isError false :content "root.clj"}
-                   (#'tools/glob-files workspace (assoc options :pattern "*.clj"))))))))))
+                   (glob-files workspace (assoc options :pattern "*.clj"))))))))))
 
 (deftest glob-subdirectory-path-test
   (with-temp-directory
@@ -130,9 +134,9 @@
         (doseq [path ["src" "./src/./" (str (.resolve ^Path directory "src"))]]
           (testing path
             (is (= {:isError false :content "src/deep/nested.clj\nsrc/direct.clj"}
-                   (#'tools/glob-files workspace {:pattern "**/*.clj" :path path})))
+                   (glob-files workspace {:pattern "**/*.clj" :path path})))
             (is (= {:isError false :content "src/direct.clj"}
-                   (#'tools/glob-files workspace {:pattern "*.clj" :path path})))))))))
+                   (glob-files workspace {:pattern "*.clj" :path path})))))))))
 
 (deftest glob-missing-pattern-test
   (with-temp-directory
@@ -141,7 +145,7 @@
         (doseq [options [{} {:pattern nil} {:pattern ""} {:pattern " \t\r\n"}]]
           (testing (pr-str options)
             (is (= {:isError true :content "не указан шаблон поиска"}
-                   (#'tools/glob-files workspace options)))))))))
+                   (glob-files workspace options)))))))))
 
 (deftest glob-missing-directory-test
   (with-temp-directory
@@ -153,7 +157,7 @@
                      (str (.resolve ^Path directory "file.clj"))]]
           (testing path
             (is (= {:isError true :content (str "папка не найдена: " path)}
-                   (#'tools/glob-files workspace {:pattern "**/*" :path path})))))))))
+                   (glob-files workspace {:pattern "**/*" :path path})))))))))
 
 (deftest glob-invalid-path-test
   (with-temp-directory
@@ -161,8 +165,8 @@
       (let [workspace (workspace-guard/create-guard directory)]
         (doseq [path ["" " \t\n"]]
           (is (= {:isError true :content "путь не указан"}
-                 (#'tools/glob-files workspace {:pattern "**/*" :path path}))))
-        (assert-error-prefix (#'tools/glob-files workspace {:pattern "**/*" :path "bad\u0000path"})
+                 (glob-files workspace {:pattern "**/*" :path path}))))
+        (assert-error-prefix (glob-files workspace {:pattern "**/*" :path "bad\u0000path"})
                              "некорректный путь: ")))))
 
 (deftest glob-invalid-pattern-test
@@ -171,7 +175,7 @@
       (let [workspace (workspace-guard/create-guard directory)]
         (doseq [pattern ["[" "{one,two" "dangling\\"]]
           (testing pattern
-            (assert-error-prefix (#'tools/glob-files workspace {:pattern pattern})
+            (assert-error-prefix (glob-files workspace {:pattern pattern})
                                  (str "непонятный шаблон '" pattern "': "))))))))
 
 (deftest glob-no-matches-test
@@ -179,10 +183,10 @@
     (fn [directory]
       (let [workspace (workspace-guard/create-guard directory)
             expected {:isError false :content "ничего не найдено по шаблону **/*.clj"}]
-        (is (= expected (#'tools/glob-files workspace {:pattern "**/*.clj"})))
+        (is (= expected (glob-files workspace {:pattern "**/*.clj"})))
         (create-file directory "notes.txt" 1)
         (create-directory directory "not-a-file.clj")
-        (is (= expected (#'tools/glob-files workspace {:pattern "**/*.clj"})))))))
+        (is (= expected (glob-files workspace {:pattern "**/*.clj"})))))))
 
 (deftest glob-path-traversal-test
   (with-temp-directory
@@ -194,7 +198,7 @@
         (doseq [path [".." "../workspace-sibling" "nested/../../workspace-sibling"
                      (str directory) (str outside)]]
           (testing path
-            (let [result (#'tools/glob-files workspace {:pattern "**/*.clj" :path path})]
+            (let [result (glob-files workspace {:pattern "**/*.clj" :path path})]
               (assert-error-prefix result "путь вне рабочей папки: ")
               (is (= (workspace-guard/resolve workspace path) result)))))))))
 
@@ -210,7 +214,7 @@
         (doseq [path ["outside-link" "outside-link/missing"
                      (str (.resolve root "outside-link"))]]
           (testing path
-            (let [result (#'tools/glob-files workspace {:pattern "**/*.clj" :path path})]
+            (let [result (glob-files workspace {:pattern "**/*.clj" :path path})]
               (assert-error-prefix result "путь ведёт наружу через симлинк: ")
               (is (= (workspace-guard/resolve workspace path) result)))))))))
 
@@ -232,7 +236,7 @@
           (Files/createSymbolicLink (.resolve root ^String link) target
                                    (make-array FileAttribute 0)))
         (is (= {:isError false :content "data/inside.clj"}
-               (#'tools/glob-files workspace {:pattern "**/*.clj"})))))))
+               (glob-files workspace {:pattern "**/*.clj"})))))))
 
 (deftest glob-ignored-directory-segments-test
   (with-temp-directory
@@ -247,7 +251,7 @@
           (create-file directory (str prefix segment "/hidden.clj") 100))
         (spit (.toFile (.resolve ^Path directory ".gitignore")) "ignored-by-git/\n")
         (is (= {:isError false :content (str/join "\n" (reverse included))}
-               (#'tools/glob-files workspace {:pattern "**/*.clj"})))))))
+               (glob-files workspace {:pattern "**/*.clj"})))))))
 
 (deftest glob-walk-io-errors-test
   (with-temp-directory
@@ -268,7 +272,7 @@
                   failing-path (reify Path
                                  (getFileSystem [_] filesystem))]
               (with-redefs [workspace-guard/resolve (fn [_ _] failing-path)]
-                (assert-error-prefix (#'tools/glob-files workspace {:pattern "**/*" :path "."})
+                (assert-error-prefix (glob-files workspace {:pattern "**/*" :path "."})
                                      "не удалось обойти папку: ")))))))))
 
 (deftest glob-exact-result-limit-test
@@ -276,11 +280,10 @@
     (fn [directory]
       (let [workspace (workspace-guard/create-guard directory)
             filenames (mapv #(format "%03d.clj" %) (range 100))]
-        (is (= 100 @#'tools/glob-max-results))
         (doseq [[modified filename] (map-indexed vector filenames)]
           (create-file directory filename modified))
         (is (= {:isError false :content (str/join "\n" (reverse filenames))}
-               (#'tools/glob-files workspace {:pattern "*.clj"})))))))
+               (glob-files workspace {:pattern "*.clj"})))))))
 
 (deftest glob-exceeded-result-limit-test
   (with-temp-directory
@@ -290,7 +293,7 @@
             warning "… показаны первые 100 совпадений, уточни шаблон"]
         (doseq [[modified filename] (map-indexed vector filenames)]
           (create-file directory filename modified))
-        (let [result (#'tools/glob-files workspace {:pattern "*.clj"})
+        (let [result (glob-files workspace {:pattern "*.clj"})
               lines (str/split-lines (:content result))
               paths (vec (butlast lines))]
           (is (false? (:isError result)))

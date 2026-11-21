@@ -4,7 +4,7 @@
             [harness-clj.agent :as agent]
             [harness-clj.agent-log :as agent-log]
             [harness-clj.chat-model :as chat-model]
-            [harness-clj.tools :as tools]))
+            [harness-clj.tools.tools :as tools]))
 
 (defn- test-tools [registry]
   {:tools registry

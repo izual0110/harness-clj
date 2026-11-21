@@ -1,7 +1,7 @@
 (ns harness-clj.agent
   (:require [harness-clj.agent-log :as agent-log]
             [harness-clj.chat-model :as chat-model]
-            [harness-clj.tools :as tools]
+            [harness-clj.tools.tools :as tools]
             [harness-clj.utils :refer [error]]
             [harness-clj.workspace-guard :as workspace-guard]))
 

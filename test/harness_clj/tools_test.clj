@@ -2,7 +2,7 @@
   (:require [clojure.data.json :as json]
             [clojure.string :as str]
             [clojure.test :refer [deftest is testing]]
-            [harness-clj.tools :as tools]
+            [harness-clj.tools.tools :as tools]
             [harness-clj.workspace-guard :as guard])
   (:import [java.nio.file Files FileVisitOption Path]
            [java.nio.file.attribute FileAttribute]))

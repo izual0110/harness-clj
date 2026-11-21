@@ -2,7 +2,7 @@
   (:require [clojure.java.io :as io]
             [clojure.string :as str]
             [clojure.test :refer [deftest is testing]]
-            [harness-clj.tools :as tools]
+            [harness-clj.tools.tools :as tools]
             [harness-clj.workspace-guard :as guard])
   (:import [java.nio.charset StandardCharsets]
            [java.nio.file Files FileVisitOption OpenOption Path]
