@@ -1,7 +1,5 @@
 (ns harness-clj.chat-model
   (:require [clojure.data.json :as json]
-            [clojure.edn :as edn]
-            [clojure.java.io :as io]
             [clojure.string :as str]
             [harness-clj.agent-log :as agent-log])
   (:import [java.net URI]
