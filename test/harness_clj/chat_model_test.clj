@@ -3,9 +3,10 @@
             [clojure.test :refer [deftest is testing]]
             [harness-clj.chat-model :as chat-model])
   (:import [com.sun.net.httpserver HttpHandler HttpServer]
-           [java.net InetSocketAddress URI]
+           [java.net InetSocketAddress]
            [java.net.http HttpClient]
-           [java.nio.charset StandardCharsets]))
+           [java.nio.charset StandardCharsets]
+           [java.time Duration]))
 
 (defn- with-server [status response f]
   (let [requests (atom [])
@@ -30,13 +31,14 @@
                               (.write out bytes)))))))
     (.start server)
     (try
-      (let [config {:host (str "http://127.0.0.1:" (.getPort (.getAddress server)) "/")
-                    :timeout-ms 5000
-                    :defaults {:model "test-model"
-                               :stream false
-                               :keep_alive "5m"
-                               :options {:temperature 0.8}}}
-            client (chat-model/client config)]
+      (let [config {:ollama {:host (str "http://127.0.0.1:" (.getPort (.getAddress server)) "/")
+                             :timeout-ms 5000
+                             :model "test-model"
+                             :stream false
+                             :think false
+                             :keep_alive "5m"
+                             :options {:temperature 0.8}}}
+            client (chat-model/create-client config)]
         (try
           (f client requests)
           (finally
@@ -44,78 +46,65 @@
       (finally
         (.stop server 0)))))
 
-(deftest config-test
-  (let [config (chat-model/load-config)
-        host (URI/create (:host config))]
-    (is (contains? #{"http" "https"} (.getScheme host)))
-    (is (some? (.getHost host)))
-    (is (pos? (:timeout-ms config)))
-    (is (string? (get-in config [:defaults :model])))
-    (is (false? (get-in config [:defaults :stream])))
-    (is (false? (get-in config [:defaults :think])))
-    (is (not (contains? (get-in config [:defaults :options]) :think))))
-  (is (thrown-with-msg? clojure.lang.ExceptionInfo #"resource not found"
-                       (chat-model/load-config "missing-chat-model.edn"))))
-
-(deftest explicit-config-test
-  (with-redefs [chat-model/load-config (fn [& _]
-                                        (throw (ex-info "Unexpected resource config access" {})))]
-    (with-server 200 "{}"
-      (fn [client _]
-        (is (= {} (chat-model/generate client "Hello")))))))
+(deftest create-client-test
+  (let [config {:base-dir "."
+                :ollama {:host "http://127.0.0.1:11434"
+                         :timeout-ms 1234
+                         :model "test-model"
+                         :stream false}}
+        client (chat-model/create-client config)]
+    (try
+      (is (= config (:config client)))
+      (is (instance? HttpClient (:internal-http-client client)))
+      (is (= (Duration/ofMillis 1234)
+             (.orElse (.connectTimeout ^HttpClient (:internal-http-client client)) nil)))
+      (finally
+        (chat-model/close client)))))
 
 (deftest close-test
   (with-server 200 "{}"
     (fn [client requests]
       (chat-model/list-models client)
       (is (nil? (chat-model/close client)))
-      (is (.isTerminated ^HttpClient (:http-client client)))
+      (is (.isTerminated ^HttpClient (:internal-http-client client)))
       (is (nil? (chat-model/close client)))
       (is (thrown? java.io.IOException (chat-model/list-models client)))
       (is (= 1 (count @requests))))))
 
-(deftest generate-test
-  (with-server 200 "{\"response\":\"Привет!\",\"done\":true}"
-    (fn [client requests]
-      (is (= {:response "Привет!" :done true}
-             (chat-model/generate client "Привет")))
-      (is (= [{:method "POST"
-               :path "/api/generate"
-               :content-type "application/json"
-               :raw-body (json/write-str (assoc (:defaults client) :prompt "Привет")
-                                                        :escape-unicode false)
-               :body (assoc (:defaults client) :prompt "Привет")}]
-             @requests)))))
-
-(deftest override-parameters-test
-  (with-server 200 "{\"response\":\"ok\",\"done\":true}"
-    (fn [client requests]
-      (chat-model/generate client "Hello"
-                           {:model "other-model" :keep_alive 0
-                            :options {:seed 42} :format "json" :prompt "Ignored"})
-      (let [body (:body (first @requests))]
-        (is (= "Hello" (:prompt body)))
-        (is (= "other-model" (:model body)))
-        (is (= 0 (:keep_alive body)))
-        (is (= "json" (:format body)))
-        (is (= {:temperature 0.8 :seed 42} (:options body)))
-        (is (false? (:stream body)))))))
-
 (deftest chat-test
-  (with-server 200 "{\"message\":{\"role\":\"assistant\",\"content\":\"Hi!\"},\"done\":true}"
+  (with-server 200 "{\"message\":{\"role\":\"assistant\",\"content\":\"Привет!\"},\"done\":true}"
     (fn [client requests]
       (let [messages [{:role "system" :content "Be brief"}
-                      {:role "user" :content "Hello"}]
+                      {:role "user" :content "Привет 👋"}]
             tools [{:type "function" :function {:name "weather"}}]
-            result (chat-model/chat client messages tools {:tools [] :options {:temperature 0}
-                                                           :messages []})
-            body (:body (first @requests))]
-        (is (= "Hi!" (get-in result [:message :content])))
-        (is (= "/api/chat" (:path (first @requests))))
-        (is (= messages (:messages body)))
-        (is (= tools (:tools body)))
-        (is (= 0 (get-in body [:options :temperature])))
-        (is (false? (:stream body)))))))
+            body (assoc (get-in client [:config :ollama]) :messages messages :tools tools)]
+        (is (= {:message {:role "assistant" :content "Привет!"} :done true}
+               (chat-model/chat client messages tools)))
+        (is (= [{:method "POST"
+                 :path "/api/chat"
+                 :content-type "application/json"
+                 :raw-body (json/write-str body :escape-unicode false)
+                 :body body}]
+               @requests))))))
+
+(deftest chat-parameters-test
+  (with-server 200 "{}"
+    (fn [client requests]
+      (let [client (update-in client [:config :ollama] merge
+                              {:model "other-model" :keep_alive 0 :format "json"
+                               :options {:temperature 0 :seed 42}
+                               :messages [] :tools []})
+            messages [{:role "user" :content "Hello"}]
+            tools [{:type "function" :function {:name "weather"}}]]
+        (chat-model/chat client messages tools)
+        (let [body (:body (first @requests))]
+          (is (= messages (:messages body)))
+          (is (= tools (:tools body)))
+          (is (= "other-model" (:model body)))
+          (is (= 0 (:keep_alive body)))
+          (is (= "json" (:format body)))
+          (is (= {:temperature 0 :seed 42} (:options body)))
+          (is (false? (:stream body))))))))
 
 (deftest chat-tool-calls-test
   (let [call {:function {:name "read" :arguments {:path "README.md" :limit 20}}}
@@ -140,19 +129,14 @@
           (is (= tools (get-in @requests [1 :body :tools]))))))))
 
 (deftest thinking-parameters-test
-  (doseq [[complete args] [[chat-model/generate ["Hello"]]
-                          [chat-model/chat [[{:role "user" :content "Hello"}] []]]]]
-    (with-server 200 "{}"
-      (fn [client requests]
-        (let [client (assoc-in client [:defaults :think] false)]
-          (apply complete client args)
-          (apply complete client (conj args {:think true}))
-          (apply complete (assoc-in client [:defaults :think] true)
-                 (conj args {:think false}))
-          (is (= [false true false]
-                 (mapv #(get-in % [:body :think]) @requests)))
-          (is (every? #(not (contains? (get-in % [:body :options]) :think))
-                      @requests)))))))
+  (with-server 200 "{}"
+    (fn [client requests]
+      (doseq [think [false true]]
+        (chat-model/chat (assoc-in client [:config :ollama :think] think)
+                         [{:role "user" :content "Hello"}] []))
+      (is (= [false true] (mapv #(get-in % [:body :think]) @requests)))
+      (is (every? #(not (contains? (get-in % [:body :options]) :think))
+                  @requests)))))
 
 (deftest list-models-test
   (with-server 200 "{\"models\":[{\"name\":\"llama3.2:latest\"}]}"
@@ -162,11 +146,11 @@
       (is (= "/api/tags" (:path (first @requests))))
       (is (nil? (:body (first @requests)))))))
 
-(deftest list-models-ignores-generation-defaults-test
+(deftest list-models-ignores-chat-parameters-test
   (with-server 200 "{\"models\":[]}"
     (fn [client requests]
       (is (= {:models []}
-             (chat-model/list-models (assoc-in client [:defaults :stream] true))))
+             (chat-model/list-models (assoc-in client [:config :ollama :stream] true))))
       (is (nil? (:body (first @requests)))))))
 
 (deftest errors-test
@@ -175,7 +159,7 @@
     (testing (str "HTTP " status)
       (with-server status body
         (fn [client _]
-          (let [error (try (chat-model/generate client "Hello")
+          (let [error (try (chat-model/chat client [{:role "user" :content "Hello"}] [])
                            (catch clojure.lang.ExceptionInfo e e))]
             (is (instance? clojure.lang.ExceptionInfo error))
             (is (= status (:status (ex-data error))))
@@ -183,26 +167,4 @@
   (with-server 200 "{\"error\":\"generation failed\"}"
     (fn [client _]
       (is (thrown-with-msg? clojure.lang.ExceptionInfo #"generation failed"
-                           (chat-model/generate client "Hello"))))))
-
-(deftest non-streaming-parameters-test
-  (doseq [[complete args] [[chat-model/generate ["Hello"]]
-                          [chat-model/chat [[] []]]]]
-    (with-server 200 "{}"
-      (fn [client requests]
-        (apply complete (update client :defaults dissoc :stream) args)
-        (is (false? (get-in (first @requests) [:body :stream])))
-        (apply complete (assoc-in client [:defaults :stream] true)
-               (conj args {:stream false}))
-        (is (false? (get-in (second @requests) [:body :stream])))))))
-
-(deftest streaming-rejected-test
-  (doseq [[complete args] [[chat-model/generate ["Hello"]]
-                          [chat-model/chat [[] []]]]]
-    (with-server 200 "{}"
-      (fn [client requests]
-        (is (thrown-with-msg? clojure.lang.ExceptionInfo #"Streaming is not supported"
-                             (apply complete client (conj args {:stream true}))))
-        (is (thrown-with-msg? clojure.lang.ExceptionInfo #"Streaming is not supported"
-                             (apply complete (assoc-in client [:defaults :stream] true) args)))
-        (is (empty? @requests))))))
+                           (chat-model/chat client [{:role "user" :content "Hello"}] []))))))

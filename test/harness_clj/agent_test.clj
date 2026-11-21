@@ -4,12 +4,29 @@
             [harness-clj.agent :as agent]
             [harness-clj.agent-log :as agent-log]
             [harness-clj.chat-model :as chat-model]
-            [harness-clj.tools.tools :as tools]))
+            [harness-clj.tools.tools :as tools])
+  (:import [java.net URI]))
 
 (defn- test-tools [registry]
   {:tools registry
    :specs (#'tools/specs registry)
    :exec-fn (partial #'tools/execute-tool registry)})
+
+(deftest load-config-test
+  (let [config (agent/load-config)
+        {:keys [host timeout-ms model stream think options]} (:ollama config)
+        uri (URI/create host)]
+    (is (string? (:base-dir config)))
+    (is (contains? #{"http" "https"} (.getScheme uri)))
+    (is (some? (.getHost uri)))
+    (is (pos? timeout-ms))
+    (is (string? model))
+    (is (false? stream))
+    (is (false? think))
+    (is (not (contains? options :think)))
+    (is (= config (agent/load-config "harness.edn"))))
+  (is (thrown-with-msg? clojure.lang.ExceptionInfo #"resource not found"
+                       (agent/load-config "missing-harness.edn"))))
 
 (deftest initial-history-test
   (let [ai-agent (agent/create-agent {:client ::client
